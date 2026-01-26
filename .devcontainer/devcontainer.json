@@ -1,0 +1,23 @@
+{
+  "name": "pls-devcontainer",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "workspaceFolder": "/workspaces/PLSMultApproach",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/PLSMultApproach,type=bind,consistency=cached",
+  "features": {
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.11"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-dotnettools.csharp",
+        "ms-azuretools.vscode-docker"
+      ]
+    }
+  },
+  "postCreateCommand": "dotnet --info && python3 --version",
+  "remoteUser": "vscode"
+}

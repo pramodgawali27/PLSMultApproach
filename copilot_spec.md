@@ -139,3 +139,5 @@ When you write code:
 - Use dependency injection throughout
 - Keep config in appsettings + env vars
 - Implement clean interfaces so we can swap Azure services later
+
+use this scope as prompt and also dev each lane into different task so fist complerte first lane we will test how it works then we will go for other lanes to implement

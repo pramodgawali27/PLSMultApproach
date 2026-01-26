@@ -60,6 +60,7 @@ builder.Services.AddSingleton<IMalwareScanner, NoopMalwareScanner>();
 builder.Services.AddSingleton<IEventPublisher, NoopEventPublisher>();
 builder.Services.AddSingleton<SummaryExportService>();
 builder.Services.AddSingleton<SummaryImageExtractor>();
+builder.Services.AddScoped<IAuditLogger, DbAuditLogger>();
 
 QuestPDF.Settings.License = LicenseType.Community;
 
@@ -144,7 +145,8 @@ app.MapPost("/api/documents/upload", async (
         PlsDbContext db,
         IFileStorage storage,
         IMalwareScanner scanner,
-        IEventPublisher publisher) =>
+        IEventPublisher publisher,
+        IAuditLogger auditLogger) =>
     {
         var user = httpContext.User;
         var tenantId = user.GetTenantId();
@@ -196,6 +198,14 @@ app.MapPost("/api/documents/upload", async (
         db.SummaryJobs.Add(job);
         await db.SaveChangesAsync();
 
+        await auditLogger.LogAsync(httpContext, "DocumentUploaded", "Document", document.Id.ToString(), new
+        {
+            document.FileName,
+            document.ContentType,
+            document.SizeBytes,
+            jobId
+        });
+
         await publisher.PublishAsync(new DocumentUploadedEvent(
             document.Id,
             tenantId,
@@ -215,7 +225,8 @@ app.MapPost("/api/summaries/{documentId:guid}/generate", async (
         Guid documentId,
         SummaryLane lane,
         HttpContext httpContext,
-        PlsDbContext db) =>
+        PlsDbContext db,
+        IAuditLogger auditLogger) =>
     {
         var tenantId = httpContext.User.GetTenantId();
         var userId = httpContext.User.GetUserId();
@@ -246,6 +257,12 @@ app.MapPost("/api/summaries/{documentId:guid}/generate", async (
 
         db.SummaryJobs.Add(job);
         await db.SaveChangesAsync();
+
+        await auditLogger.LogAsync(httpContext, "SummaryRequested", "SummaryJob", job.Id.ToString(), new
+        {
+            documentId,
+            lane
+        });
 
         return Results.Ok(new SummaryGenerateResponse(job.Id));
     })
@@ -288,7 +305,8 @@ app.MapGet("/api/summaries/{summaryId:guid}/download", async (
         HttpContext httpContext,
         PlsDbContext db,
         SummaryExportService exporter,
-        SummaryImageExtractor imageExtractor) =>
+        SummaryImageExtractor imageExtractor,
+        IAuditLogger auditLogger) =>
     {
         var tenantId = httpContext.User.GetTenantId();
         var userId = httpContext.User.GetUserId();
@@ -309,6 +327,13 @@ app.MapGet("/api/summaries/{summaryId:guid}/download", async (
         var images = imageExtractor.ExtractImages(document.StorageUri, document.ContentType, summary.ModelInfoJson);
         var safeBaseName = MakeSafeFileName(Path.GetFileNameWithoutExtension(document.FileName));
         var chosenFormat = string.IsNullOrWhiteSpace(format) ? "pdf" : format.Trim().ToLowerInvariant();
+
+        await auditLogger.LogAsync(httpContext, "SummaryDownloaded", "Summary", summary.Id.ToString(), new
+        {
+            summary.DocumentId,
+            summary.Lane,
+            format = chosenFormat
+        });
 
         return chosenFormat switch
         {
@@ -418,6 +443,47 @@ static string MakeSafeFileName(string name)
 
     var safe = new string(name.Select(ch => char.IsLetterOrDigit(ch) ? ch : '-').ToArray());
     return safe.Trim('-');
+}
+
+interface IAuditLogger
+{
+    Task LogAsync(HttpContext context, string action, string entityType, string entityId, object? metadata);
+}
+
+sealed class DbAuditLogger : IAuditLogger
+{
+    private readonly PlsDbContext _db;
+    private readonly ILogger<DbAuditLogger> _logger;
+
+    public DbAuditLogger(PlsDbContext db, ILogger<DbAuditLogger> logger)
+    {
+        _db = db;
+        _logger = logger;
+    }
+
+    public async Task LogAsync(HttpContext context, string action, string entityType, string entityId, object? metadata)
+    {
+        var user = context.User;
+        var tenantId = user.GetTenantId();
+        var userId = user.GetUserId();
+
+        var payload = metadata is null ? null : System.Text.Json.JsonSerializer.Serialize(metadata);
+
+        _db.AuditLogs.Add(new AuditLog
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            UserId = userId,
+            Action = action,
+            EntityType = entityType,
+            EntityId = entityId,
+            Timestamp = DateTimeOffset.UtcNow,
+            MetadataJson = payload
+        });
+
+        await _db.SaveChangesAsync();
+        _logger.LogInformation("Audit logged {Action} for {EntityType} {EntityId}", action, entityType, entityId);
+    }
 }
 
 app.MapGet("/health", () => Results.Ok("ok"));

@@ -70,6 +70,7 @@ Use the login page (dev auth). The JWT is stored in local storage as `pls_token`
 - API: `docs/api.md`
 - Threat model: `docs/threat-model.md`
 - Run local: `docs/run-local.md`
+- Compliance tests: `docs/compliance-tests.md`
 
 ## Troubleshooting
 - 401 errors: re-login and ensure token is valid.
