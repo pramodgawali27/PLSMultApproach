@@ -1,0 +1,6 @@
+@SummarizationService_HostAddress = http://localhost:0
+
+GET {{SummarizationService_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

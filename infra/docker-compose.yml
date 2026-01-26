@@ -1,0 +1,110 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: pls
+      POSTGRES_PASSWORD: pls
+      POSTGRES_DB: pls
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite
+    ports:
+      - "10000:10000"
+      - "10001:10001"
+      - "10002:10002"
+    volumes:
+      - azurite-data:/data
+
+  document-service:
+    build:
+      context: ..
+      dockerfile: services/document-service/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://0.0.0.0:8080
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=pls;Username=pls;Password=pls
+      LocalStorage__BasePath: /data/storage
+    ports:
+      - "5072:8080"
+    depends_on:
+      - postgres
+    volumes:
+      - pls-storage:/data/storage
+
+  orchestrator-service:
+    build:
+      context: ..
+      dockerfile: services/orchestrator-service/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://0.0.0.0:8080
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=pls;Username=pls;Password=pls
+      SummarizationService__BaseUrl: http://summarization-service:8080
+    ports:
+      - "5073:8080"
+    depends_on:
+      - postgres
+      - summarization-service
+
+  summarization-service:
+    build:
+      context: ..
+      dockerfile: services/summarization-service/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://0.0.0.0:8080
+      DOCLING_URL: http://docling-service:8080
+      USE_DOCLING: "true"
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
+      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-}
+      AZURE_OPENAI_DEPLOYMENT_PROMPT: ${AZURE_OPENAI_DEPLOYMENT_PROMPT:-}
+      AZURE_OPENAI_DEPLOYMENT_FINETUNE: ${AZURE_OPENAI_DEPLOYMENT_FINETUNE:-}
+      AZURE_OPENAI_DEPLOYMENT_AGENT: ${AZURE_OPENAI_DEPLOYMENT_AGENT:-}
+      AZURE_OPENAI_DEPLOYMENT_IMAGE: ${AZURE_OPENAI_DEPLOYMENT_IMAGE:-}
+      AZURE_OPENAI_KEY: ${AZURE_OPENAI_KEY:-}
+      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-}
+      AZURE_SEARCH_ENDPOINT: ${AZURE_SEARCH_ENDPOINT:-}
+      AZURE_SEARCH_INDEX_NAME: ${AZURE_SEARCH_INDEX_NAME:-}
+      AZURE_SEARCH_KEY: ${AZURE_SEARCH_KEY:-}
+      AZURE_SEARCH_EMBEDDING_DEPLOYMENT: ${AZURE_SEARCH_EMBEDDING_DEPLOYMENT:-}
+    ports:
+      - "5074:8080"
+    volumes:
+      - pls-storage:/data/storage
+    depends_on:
+      - docling-service
+
+  docling-service:
+    build:
+      context: ..
+      dockerfile: services/docling-service/Dockerfile
+    ports:
+      - "5075:8080"
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+    environment:
+      VITE_API_BASE_URL: http://localhost:5072
+    ports:
+      - "5173:5173"
+    depends_on:
+      - document-service
+
+volumes:
+  postgres-data:
+  azurite-data:
+  pls-storage:

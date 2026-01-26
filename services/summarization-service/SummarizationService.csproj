@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.8" />
+    <PackageReference Include="DocumentFormat.OpenXml" Version="3.0.2" />
+    <PackageReference Include="UglyToad.PdfPig" Version="1.7.0-custom-5" />
+    <PackageReference Include="Azure.AI.OpenAI" Version="1.0.0-beta.17" />
+    <PackageReference Include="Azure.Identity" Version="1.11.0" />
+    <PackageReference Include="Scriban" Version="5.7.0" />
+    <PackageReference Include="Microsoft.SemanticKernel" Version="1.16.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\shared\building-blocks\BuildingBlocks.csproj" />
+    <ProjectReference Include="..\..\shared\contracts\Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\shared\prompts\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>prompts\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </Content>
+    <Content Include="..\..\shared\policies\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>policies\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </Content>
+  </ItemGroup>
+
+</Project>

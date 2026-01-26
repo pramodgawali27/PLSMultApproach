@@ -1,0 +1,30 @@
+{
+  "piiPhi": {
+    "enabled": true,
+    "mode": "block",
+    "patterns": [
+      "\\b\\d{3}-\\d{2}-\\d{4}\\b",
+      "\\b(?:MRN|Patient ID|DOB|SSN)[:\\s]"
+    ]
+  },
+  "jailbreak": {
+    "enabled": true,
+    "mode": "warn",
+    "patterns": [
+      "ignore previous",
+      "bypass",
+      "jailbreak",
+      "system prompt"
+    ]
+  },
+  "toxicity": {
+    "enabled": true,
+    "mode": "warn",
+    "keywords": ["hate", "kill", "violent"]
+  },
+  "groundedness": {
+    "enabled": true,
+    "mode": "warn",
+    "requiredForLanes": ["LaneC", "LaneD"]
+  }
+}

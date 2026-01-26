@@ -1,0 +1,9 @@
+Use ONLY the provided context chunks to answer.
+Cite chunk ids in brackets.
+Summarize in under 200 words.
+
+Context:
+{{ context }}
+
+Question:
+Create a plain-language summary for a patient.

@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "dgSpecHash": "0+FHfuNVEP4=",
+  "success": false,
+  "projectFilePath": "/Users/pramodgawali27/Project Workspace/PersonalProjects/PLSMultApproach/tests/building-blocks-tests/BuildingBlocks.Tests.csproj",
+  "expectedPackageFiles": [],
+  "logs": [
+    {
+      "code": "NU1301",
+      "level": "Error",
+      "message": "Unable to load the service index for source https://api.nuget.org/v3/index.json.\n  The type initializer for 'System.Net.CookieContainer' threw an exception.\n  GetDomainName: -1",
+      "projectPath": "/Users/pramodgawali27/Project Workspace/PersonalProjects/PLSMultApproach/tests/building-blocks-tests/BuildingBlocks.Tests.csproj",
+      "filePath": "/Users/pramodgawali27/Project Workspace/PersonalProjects/PLSMultApproach/tests/building-blocks-tests/BuildingBlocks.Tests.csproj",
+      "libraryId": "coverlet.collector",
+      "targetGraphs": []
+    }
+  ]
+}

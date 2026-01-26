@@ -1,0 +1,6 @@
+Step 1: Summarize the document in plain language.
+Step 2: Evaluate readability and factuality.
+Step 3: Revise for clarity and safety.
+
+Document:
+{{ text }}

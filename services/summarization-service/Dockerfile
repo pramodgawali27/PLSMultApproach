@@ -1,0 +1,13 @@
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+COPY shared ./shared
+COPY services/summarization-service ./services/summarization-service
+WORKDIR /src/services/summarization-service
+RUN dotnet restore
+RUN dotnet publish -c Release -o /app/publish
+
+FROM mcr.microsoft.com/dotnet/aspnet:8.0
+WORKDIR /app
+COPY --from=build /app/publish .
+EXPOSE 8080
+ENTRYPOINT ["dotnet", "SummarizationService.dll"]

@@ -1,0 +1,207 @@
+using Microsoft.AspNetCore.Mvc;
+using PLS.BuildingBlocks.Correlation;
+using PLS.BuildingBlocks.Results;
+using PLS.Contracts;
+using SummarizationService.Guardrails;
+using SummarizationService.Llm;
+using SummarizationService.Extraction;
+using SummarizationService.Images;
+using SummarizationService.Prompting;
+using Azure.Identity;
+using Microsoft.SemanticKernel;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddHttpClient("docling");
+builder.Services.AddHttpClient("azureopenai");
+builder.Services.AddSingleton<CompositeTextExtractor>();
+builder.Services.AddSingleton<DoclingTextExtractor>();
+builder.Services.AddSingleton<ITextExtractor, HybridTextExtractor>();
+builder.Services.AddSingleton<IImageGenerator, AzureOpenAiImageGenerator>();
+builder.Services.AddSingleton<PromptTemplateStore>();
+builder.Services.AddSingleton(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var endpoint = configuration["AZURE_OPENAI_ENDPOINT"] ?? string.Empty;
+    var deployment = configuration["AZURE_OPENAI_DEPLOYMENT_PROMPT"] ?? string.Empty;
+    var apiKey = configuration["AZURE_OPENAI_KEY"];
+
+    if (string.IsNullOrWhiteSpace(endpoint) || string.IsNullOrWhiteSpace(deployment))
+    {
+        throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_DEPLOYMENT_PROMPT are required.");
+    }
+
+    var builder = Kernel.CreateBuilder();
+    if (!string.IsNullOrWhiteSpace(apiKey))
+    {
+        builder.AddAzureOpenAIChatCompletion(deployment, endpoint, apiKey);
+    }
+    else
+    {
+        var clientId = configuration["AZURE_CLIENT_ID"];
+        var credential = string.IsNullOrWhiteSpace(clientId)
+            ? new DefaultAzureCredential()
+            : new DefaultAzureCredential(new DefaultAzureCredentialOptions { ManagedIdentityClientId = clientId });
+        builder.AddAzureOpenAIChatCompletion(deployment, endpoint, credential);
+    }
+
+    return builder.Build();
+});
+builder.Services.AddSingleton<ILLMClient, SemanticKernelLlmClient>();
+builder.Services.AddSingleton(GuardrailPolicyLoader.Load(builder.Configuration));
+builder.Services.AddSingleton<GuardrailEvaluator>();
+
+var app = builder.Build();
+
+app.UseCorrelationId();
+
+if (app.Environment.IsDevelopment())
+{
+    // OpenAPI is optional in this starter.
+}
+
+app.MapPost("/internal/summarize", async (
+    [FromBody] SummarizeRequest request,
+    ITextExtractor extractor,
+    PromptTemplateStore templates,
+    GuardrailEvaluator guardrails,
+    ILLMClient llm,
+    IImageGenerator imageGenerator,
+    IConfiguration configuration,
+    CancellationToken cancellationToken) =>
+{
+    if (request.Lane != SummaryLane.LaneA)
+    {
+        return Results.BadRequest("Lane not implemented yet.");
+    }
+
+    var extraction = await extractor.ExtractAsync(request.DocumentId, request.StorageUri, request.ContentType);
+    if (!extraction.IsSuccess || extraction.Value is null)
+    {
+        return Results.BadRequest(extraction.Error ?? "Failed to extract text.");
+    }
+
+    var savedImages = ImagePersistence.Save(extraction.Value.Images, request.DocumentId, request.StorageUri);
+
+    var guardrailResult = guardrails.Evaluate(request.Lane, extraction.Value.Text);
+    if (guardrailResult.FinalDecision == "block")
+    {
+        return Results.BadRequest("Guardrail policy blocked summarization.");
+    }
+
+    var promptModel = new { text = extraction.Value.Text };
+    var usedPromptOverride = !string.IsNullOrWhiteSpace(request.PromptOverride);
+    var template = usedPromptOverride
+        ? templates.RenderContent(request.PromptOverride!, promptModel)
+        : templates.Render(Path.Combine("lane-a", "summary.md.sbn"), promptModel);
+    var systemPrompt = "You are a helpful medical summarizer. Do not provide medical advice.";
+
+    var deployment = configuration["AZURE_OPENAI_DEPLOYMENT_PROMPT"]
+        ?? throw new InvalidOperationException("AZURE_OPENAI_DEPLOYMENT_PROMPT is required.");
+
+    var response = await llm.CompleteAsync(
+        new LlmRequest(systemPrompt, template, deployment, 0.2, 1400),
+        cancellationToken);
+
+    var parsed = ImagePromptParser.Parse(response.Text);
+    var generatedImages = await ImageGenerationPipeline.GenerateAsync(
+        parsed.ImagePrompts,
+        request.DocumentId,
+        request.StorageUri,
+        imageGenerator,
+        configuration,
+        cancellationToken);
+
+    var modelInfo = new
+    {
+        modelDeployment = response.ModelDeployment,
+        tokensEstimated = response.TokensEstimated,
+        promptTemplateId = "lane-a/summary",
+        promptOverrideUsed = usedPromptOverride,
+        guardrails = new
+        {
+            finalDecision = guardrailResult.FinalDecision,
+            findings = guardrailResult.Findings
+        },
+        extraction = new
+        {
+            source = extraction.Value.Source,
+            images = savedImages.Select(image => new
+            {
+                filePath = image.FilePath,
+                contentType = image.ContentType,
+                caption = image.Caption
+            })
+        },
+        generatedImages = generatedImages.Select(image => new
+        {
+            filePath = image.FilePath,
+            contentType = image.ContentType,
+            caption = image.Caption
+        }),
+        imagePrompts = parsed.ImagePrompts.Select(prompt => new
+        {
+            id = prompt.FigureId,
+            title = prompt.Title,
+            placement = prompt.Placement,
+            style = prompt.Style,
+            aspectRatio = prompt.AspectRatio
+        })
+    };
+
+    return Results.Ok(new SummarizeResponse(parsed.SummaryText, System.Text.Json.JsonSerializer.Serialize(modelInfo)));
+});
+
+app.MapGet("/health", () => Results.Ok("ok"));
+
+app.Run();
+
+sealed record SummarizeRequest(Guid DocumentId, SummaryLane Lane, string StorageUri, string ContentType, string? PromptOverride);
+
+sealed record SummarizeResponse(string SummaryText, string? ModelInfoJson);
+
+static class ImagePersistence
+{
+    public static IReadOnlyList<SavedImage> Save(
+        IReadOnlyList<ExtractedImage> images,
+        Guid documentId,
+        string storageUri)
+    {
+        if (images.Count == 0)
+        {
+            return Array.Empty<SavedImage>();
+        }
+
+        var directory = Path.GetDirectoryName(storageUri);
+        if (string.IsNullOrWhiteSpace(directory))
+        {
+            return Array.Empty<SavedImage>();
+        }
+
+        var saved = new List<SavedImage>();
+        for (var i = 0; i < images.Count; i++)
+        {
+            var image = images[i];
+            var extension = ExtensionFromContentType(image.ContentType);
+            var filePath = Path.Combine(directory, $"{documentId}-image-{i + 1}{extension}");
+            File.WriteAllBytes(filePath, image.Content);
+            saved.Add(new SavedImage(filePath, image.ContentType, image.Caption));
+        }
+
+        return saved;
+    }
+
+    private static string ExtensionFromContentType(string contentType)
+    {
+        return contentType switch
+        {
+            "image/jpeg" => ".jpg",
+            "image/png" => ".png",
+            "image/webp" => ".webp",
+            "image/gif" => ".gif",
+            _ => ".bin"
+        };
+    }
+}
+
+sealed record SavedImage(string FilePath, string ContentType, string? Caption);
