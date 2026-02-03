@@ -445,47 +445,6 @@ static string MakeSafeFileName(string name)
     return safe.Trim('-');
 }
 
-interface IAuditLogger
-{
-    Task LogAsync(HttpContext context, string action, string entityType, string entityId, object? metadata);
-}
-
-sealed class DbAuditLogger : IAuditLogger
-{
-    private readonly PlsDbContext _db;
-    private readonly ILogger<DbAuditLogger> _logger;
-
-    public DbAuditLogger(PlsDbContext db, ILogger<DbAuditLogger> logger)
-    {
-        _db = db;
-        _logger = logger;
-    }
-
-    public async Task LogAsync(HttpContext context, string action, string entityType, string entityId, object? metadata)
-    {
-        var user = context.User;
-        var tenantId = user.GetTenantId();
-        var userId = user.GetUserId();
-
-        var payload = metadata is null ? null : System.Text.Json.JsonSerializer.Serialize(metadata);
-
-        _db.AuditLogs.Add(new AuditLog
-        {
-            Id = Guid.NewGuid(),
-            TenantId = tenantId,
-            UserId = userId,
-            Action = action,
-            EntityType = entityType,
-            EntityId = entityId,
-            Timestamp = DateTimeOffset.UtcNow,
-            MetadataJson = payload
-        });
-
-        await _db.SaveChangesAsync();
-        _logger.LogInformation("Audit logged {Action} for {EntityType} {EntityId}", action, entityType, entityId);
-    }
-}
-
 app.MapGet("/health", () => Results.Ok("ok"));
 
 using (var scope = app.Services.CreateScope())
@@ -499,41 +458,6 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.Run();
-
-static class SeedData
-{
-    public static async Task InitializeAsync(PlsDbContext db)
-    {
-        if (await db.Tenants.AnyAsync())
-        {
-            return;
-        }
-
-        var tenantId = Guid.NewGuid();
-        var userId = Guid.NewGuid();
-
-        db.Tenants.Add(new Tenant { Id = tenantId, Name = "Demo Tenant" });
-        db.Users.Add(new User
-        {
-            Id = userId,
-            TenantId = tenantId,
-            ExternalId = Guid.NewGuid().ToString("n"),
-            Email = "demo@pls.local",
-            DisplayName = "demo"
-        });
-        db.Subscriptions.Add(new Subscription
-        {
-            Id = Guid.NewGuid(),
-            TenantId = tenantId,
-            PlanName = "Starter",
-            EnabledLanes = (int)LaneFlags.LaneA,
-            TokenQuotaMonthly = 10000,
-            ActiveFrom = DateTimeOffset.UtcNow
-        });
-
-        await db.SaveChangesAsync();
-    }
-}
 
 interface IFileStorage
 {

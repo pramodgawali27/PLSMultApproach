@@ -12,8 +12,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <h1 className="font-display text-3xl font-semibold">Plain Language Summaries</h1>
         </div>
         <nav className="flex gap-4 text-sm font-semibold">
-          <NavLink className="hover:text-moss" to="/">Home</NavLink>
-          <NavLink className="hover:text-moss" to="/dashboard">Dashboard</NavLink>
+          <NavLink className="hover:text-moss" to="/app">Home</NavLink>
+          <NavLink className="hover:text-moss" to="/app/dashboard">Dashboard</NavLink>
+          <NavLink className="hover:text-moss" to="/app/settings">Settings</NavLink>
           <button className="text-ember" onClick={() => setToken(null)}>Log out</button>
         </nav>
       </header>

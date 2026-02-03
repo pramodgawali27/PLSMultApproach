@@ -1,192 +1,339 @@
-import { useEffect, useMemo, useState } from "react";
-import { fetchEntitlements, fetchJob, fetchPromptTemplate, uploadDocument, type SummaryLane } from "../api";
-
-const laneLabels: Record<string, string> = {
-  LaneA: "Lane A — Prompt",
-  LaneB: "Lane B — Fine-tuned",
-  LaneC: "Lane C — RAG",
-  LaneD: "Lane D — Agentic"
-};
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  fetchEntitlements,
+  fetchPromptTemplate,
+  generateSummary,
+  SummaryLane,
+  uploadDocument
+} from "../api";
+import LaneCard from "../components/LaneCard";
+import StatusBadge from "../components/StatusBadge";
+import UploadDropzone from "../components/UploadDropzone";
+import { useJobPolling } from "../hooks/useJobPolling";
 
 export default function Home() {
-  const [file, setFile] = useState<File | null>(null);
-  const [lanes, setLanes] = useState<SummaryLane[]>([]);
   const [selectedLane, setSelectedLane] = useState<SummaryLane>("LaneA");
+  const [file, setFile] = useState<File | null>(null);
+  const [promptOverride, setPromptOverride] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
-  const [jobStatus, setJobStatus] = useState<string | null>(null);
+  const [title, setTitle] = useState("");
+  const [therapeuticArea, setTherapeuticArea] = useState("");
+  const [audience, setAudience] = useState("Patients");
+  const [includeImages, setIncludeImages] = useState(true);
+  const [outputFormat, setOutputFormat] = useState<"HTML" | "PDF">("HTML");
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [showPromptEditor, setShowPromptEditor] = useState(false);
-  const [promptOverride, setPromptOverride] = useState("");
-  const [promptLoading, setPromptLoading] = useState(false);
 
-  useEffect(() => {
-    fetchEntitlements()
-      .then((enabled) => {
-        setLanes(enabled);
-        if (enabled.length > 0) {
-          setSelectedLane(enabled[0]);
-        }
-      })
-      .catch(() => setError("Unable to load entitlements."));
-  }, []);
+  const { data: entitlements, isLoading: loadingEntitlements } = useQuery({
+    queryKey: ["entitlements"],
+    queryFn: fetchEntitlements
+  });
 
-  useEffect(() => {
-    if (!jobId) return;
-    let active = true;
-    const interval = setInterval(async () => {
-      try {
-        const data = await fetchJob(jobId);
-        if (!active) return;
-        setJobStatus(data.status);
-        if (data.status === "Completed" || data.status === "Failed") {
-          clearInterval(interval);
-        }
-      } catch {
-        if (active) {
-          setError("Failed to fetch job status.");
-        }
-      }
-    }, 2000);
+  const { data: jobData } = useJobPolling(jobId ?? undefined);
+  const jobStatus = jobData?.status ?? "Queued";
+  const jobError = jobData?.errorMessage ?? null;
 
-    return () => {
-      active = false;
-      clearInterval(interval);
-    };
-  }, [jobId]);
+  const allowedLanes = useMemo(
+    () => new Set(entitlements?.enabledLanes ?? []),
+    [entitlements?.enabledLanes]
+  );
 
-  const laneOptions = useMemo<SummaryLane[]>(() => {
-    if (lanes.length === 0) {
-      return ["LaneA"];
-    }
-    return lanes;
-  }, [lanes]);
+  const features = entitlements?.features ?? { images: true, citations: true };
 
   const handleUpload = async () => {
     if (!file) {
-      setError("Select a document to upload.");
+      setError("Please select a document.");
       return;
     }
-    setError(null);
-    setLoading(true);
+
     try {
-      const upload = await uploadDocument(
-        file,
-        selectedLane,
-        showPromptEditor && promptOverride.trim() ? promptOverride : undefined
-      );
-      setJobId(upload.jobId);
-      setJobStatus("Queued");
-    } catch {
+      setError(null);
+      const uploadResult = await uploadDocument(file, selectedLane, promptOverride ?? undefined, {
+        title: title || undefined,
+        therapeuticArea: therapeuticArea || undefined,
+        audience: audience as "Patients" | "General public" | "Healthcare professionals"
+      });
+      const generateResult = await generateSummary(uploadResult.documentId, selectedLane);
+      setJobId(generateResult.jobId);
+    } catch (err) {
       setError("Upload or generation failed.");
-    } finally {
-      setLoading(false);
     }
   };
 
+  const handlePromptLoad = async () => {
+    try {
+      const template = await fetchPromptTemplate(selectedLane);
+      setPromptOverride(template);
+    } catch {
+      setPromptOverride("Unable to load prompt template.");
+    }
+  };
+
+  const laneCards = [
+    {
+      lane: "LaneA" as SummaryLane,
+      title: "Lane A",
+      description: "Prompt-based summary (fast, low cost)",
+      bestFor: "Quick summaries",
+      badges: ["Fast"]
+    },
+    {
+      lane: "LaneB" as SummaryLane,
+      title: "Lane B",
+      description: "Fine-tuned model (consistent style)",
+      bestFor: "Consistent tone",
+      badges: ["Consistent"]
+    },
+    {
+      lane: "LaneC" as SummaryLane,
+      title: "Lane C",
+      description: "RAG grounded summary with citations",
+      bestFor: "Evidence-based",
+      badges: ["Citations", "Evidence"]
+    },
+    {
+      lane: "LaneD" as SummaryLane,
+      title: "Lane D",
+      description: "Agentic multi-step orchestration",
+      bestFor: "Premium workflows",
+      badges: ["Premium", "Diagrams"]
+    }
+  ];
+
+  const selectedLaneMeta = laneCards.find((card) => card.lane === selectedLane);
+  const lanePricing: Record<SummaryLane, string> = {
+    LaneA: "Low cost · Fast turnaround",
+    LaneB: "Medium cost · Consistent tone",
+    LaneC: "Higher cost · Evidence-based",
+    LaneD: "Premium · Multi-step + diagrams"
+  };
+  const laneTips: Record<SummaryLane, string[]> = {
+    LaneA: [
+      "Best for quick summaries under 10 pages.",
+      "Use prompt override for tone control."
+    ],
+    LaneB: [
+      "Great for repeatable template output.",
+      "Use for consistent patient-friendly language."
+    ],
+    LaneC: [
+      "Ideal for long documents with citations.",
+      "Make sure the source document text is extractable."
+    ],
+    LaneD: [
+      "Use for compliance-heavy workflows.",
+      "Expect longer processing times."
+    ]
+  };
+
   return (
-    <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-      <section className="glass-panel rounded-3xl p-6 md:p-8">
-        <h2 className="font-display text-2xl font-semibold">Generate a plain-language summary</h2>
-        <p className="mt-2 text-sm text-moss">
-          Upload a medical document and pick an enabled lane. Lane A is available in this starter.
+    <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+      <section className="glass-panel rounded-3xl p-6 shadow-xl">
+        <h2 className="font-display text-2xl font-semibold">Upload & generate</h2>
+        <p className="mt-2 text-sm text-slate-600">
+          Upload a medical document and generate a plain-language summary.
         </p>
 
-        <div className="mt-6 grid gap-4">
-          <label className="grid gap-2 text-sm font-semibold">
-            Document
+        <div className="mt-6">
+          <UploadDropzone onFileSelected={setFile} />
+          {file && <p className="mt-2 text-xs text-slate-500">Selected: {file.name}</p>}
+        </div>
+
+        <div className="mt-6 grid gap-4 md:grid-cols-2">
+          <label className="grid gap-1 text-sm font-semibold">
+            Title (optional)
             <input
-              className="rounded-xl border border-clay bg-white/70 px-4 py-2"
-              type="file"
-              accept=".pdf,.docx,.txt"
-              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+              className="rounded-xl border border-clay bg-white/70 px-3 py-2 text-sm"
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
             />
           </label>
-
-          <label className="grid gap-2 text-sm font-semibold">
-            Lane
+          <label className="grid gap-1 text-sm font-semibold">
+            Therapeutic area
+            <input
+              className="rounded-xl border border-clay bg-white/70 px-3 py-2 text-sm"
+              value={therapeuticArea}
+              onChange={(event) => setTherapeuticArea(event.target.value)}
+            />
+          </label>
+          <label className="grid gap-1 text-sm font-semibold">
+            Audience
             <select
-              className="rounded-xl border border-clay bg-white/70 px-4 py-2"
-              value={selectedLane}
-              onChange={(event) => {
-                setSelectedLane(event.target.value as SummaryLane);
-                setPromptOverride("");
-              }}
+              className="rounded-xl border border-clay bg-white/70 px-3 py-2 text-sm"
+              value={audience}
+              onChange={(event) => setAudience(event.target.value)}
             >
-              {laneOptions.map((lane) => (
-                <option key={lane} value={lane}>
-                  {laneLabels[lane] ?? lane}
-                </option>
-              ))}
+              <option>Patients</option>
+              <option>General public</option>
+              <option>Healthcare professionals</option>
             </select>
           </label>
+        </div>
 
-          <label className="flex items-center gap-2 text-sm font-semibold">
+        <div className="mt-6">
+          <label className="text-sm font-semibold">Lane selection</label>
+          {loadingEntitlements && <p className="text-sm text-slate-500">Loading entitlements...</p>}
+          {!loadingEntitlements && (entitlements?.enabledLanes?.length ?? 0) === 0 && (
+            <p className="text-sm text-ember">Unable to load entitlements.</p>
+          )}
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            {laneCards.map((card) => (
+              <LaneCard
+                key={card.lane}
+                lane={card.lane}
+                title={card.title}
+                description={card.description}
+                bestFor={card.bestFor}
+                badges={card.badges}
+                selected={selectedLane === card.lane}
+                locked={!allowedLanes.has(card.lane)}
+                onSelect={setSelectedLane}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-3 md:grid-cols-2">
+          <label className="flex items-center justify-between rounded-xl border border-sand bg-white/70 px-3 py-3 text-sm">
+            Include diagrams/images
             <input
               type="checkbox"
-              checked={showPromptEditor}
-              onChange={(event) => setShowPromptEditor(event.target.checked)}
+              checked={includeImages}
+              onChange={(event) => setIncludeImages(event.target.checked)}
+              disabled={!features.images}
             />
-            Customize prompt
           </label>
+          <label className="flex items-center justify-between rounded-xl border border-sand bg-white/70 px-3 py-3 text-sm">
+            Output format
+            <select
+              className="rounded-lg border border-clay bg-white px-2 py-1 text-xs"
+              value={outputFormat}
+              onChange={(event) => setOutputFormat(event.target.value as "HTML" | "PDF")}
+            >
+              <option value="HTML">HTML</option>
+              <option value="PDF">PDF</option>
+            </select>
+          </label>
+        </div>
 
-          {showPromptEditor && (
-            <div className="grid gap-3">
-              <div className="flex flex-wrap gap-2">
-                <button
-                  className="rounded-full border border-moss px-4 py-2 text-sm font-semibold text-moss"
-                  onClick={async () => {
-                    setPromptLoading(true);
-                    try {
-                      const template = await fetchPromptTemplate(selectedLane);
-                      setPromptOverride(template);
-                    } catch {
-                      setError("Unable to load prompt template.");
-                    } finally {
-                      setPromptLoading(false);
-                    }
-                  }}
-                  disabled={promptLoading}
-                >
-                  {promptLoading ? "Loading..." : "Load default prompt"}
-                </button>
-              </div>
-              <textarea
-                className="min-h-[160px] rounded-xl border border-clay bg-white/70 px-4 py-3 text-sm"
-                value={promptOverride}
-                onChange={(event) => setPromptOverride(event.target.value)}
-                placeholder="Edit the prompt template for this run."
-              />
-            </div>
+        <div className="mt-6">
+          <label className="text-sm font-semibold">Prompt override</label>
+          <div className="mt-2 flex flex-wrap gap-3">
+            <button
+              className="rounded-full border border-sand px-4 py-2 text-xs font-semibold"
+              type="button"
+              onClick={handlePromptLoad}
+            >
+              Load template
+            </button>
+            <button
+              className="rounded-full border border-sand px-4 py-2 text-xs font-semibold"
+              type="button"
+              onClick={() => setPromptOverride("")}
+            >
+              Clear override
+            </button>
+          </div>
+          {promptOverride !== null && (
+            <textarea
+              className="mt-3 w-full rounded-xl border border-sand bg-white/70 p-3 text-xs"
+              rows={6}
+              value={promptOverride}
+              onChange={(event) => setPromptOverride(event.target.value)}
+            />
           )}
+        </div>
 
-          {error && <p className="text-sm text-ember">{error}</p>}
+        {error && <p className="mt-4 text-sm text-ember">{error}</p>}
 
+        <div className="mt-6 flex flex-wrap gap-3">
           <button
-            className="rounded-full bg-moss px-6 py-3 font-semibold text-fog"
+            className="rounded-full bg-ink px-6 py-3 text-sm font-semibold text-fog"
             onClick={handleUpload}
-            disabled={loading}
+            disabled={!file}
           >
-            {loading ? "Generating..." : "Generate Summary"}
+            Generate summary
+          </button>
+          <button className="rounded-full border border-sand px-6 py-3 text-sm font-semibold" type="button">
+            Save as draft
           </button>
         </div>
       </section>
 
-      <aside className="glass-panel rounded-3xl p-6">
-        <h3 className="font-display text-xl font-semibold">Job status</h3>
-        <p className="mt-2 text-sm text-moss">Watch the job progress across the pipeline.</p>
+      <section className="glass-panel rounded-3xl p-6 lg:sticky lg:top-8 self-start">
+        {jobId ? (
+          <>
+            <h2 className="font-display text-2xl font-semibold">Job status</h2>
+            <p className="mt-2 text-sm text-slate-600">Live status updates for your latest job.</p>
 
-        <div className="mt-6 grid gap-3">
-          <div className="flex items-center justify-between text-sm">
-            <span>Current job</span>
-            <span className="font-semibold">{jobId ?? "--"}</span>
-          </div>
-          <div className="flex items-center justify-between text-sm">
-            <span>Status</span>
-            <span className="badge bg-clay text-ink">{jobStatus ?? "Idle"}</span>
-          </div>
-        </div>
-      </aside>
+            <div className="mt-6 space-y-3 rounded-2xl bg-white/70 p-4 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-xs uppercase tracking-wide text-slate-500">Current job</span>
+                <span className="text-xs font-semibold break-all text-right">{jobId}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-600">Status</span>
+                <StatusBadge status={jobStatus} />
+              </div>
+              {jobError && <p className="text-xs text-ember">Failed. {jobError}</p>}
+            </div>
+
+            {jobData?.summaryId && jobData.status === "Completed" && (
+              <div className="mt-6 rounded-2xl border border-sand bg-white/70 p-4">
+                <p className="text-xs uppercase tracking-wide text-slate-500">Summary ready</p>
+                <h3 className="mt-2 font-semibold">Summary in plain language</h3>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <a
+                    className="rounded-full bg-moss px-4 py-2 text-xs font-semibold text-white"
+                    href={`/app/summaries/${jobData.summaryId}`}
+                  >
+                    View Summary
+                  </a>
+                  <button
+                    className="rounded-full border border-sand px-4 py-2 text-xs font-semibold"
+                    type="button"
+                    onClick={() => setJobId(null)}
+                  >
+                    Start new
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <h2 className="font-display text-2xl font-semibold">Lane details</h2>
+            <p className="mt-2 text-sm text-slate-600">
+              Compare lanes, pricing, and tips before generating.
+            </p>
+
+            <div className="mt-6 rounded-2xl bg-white/70 p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs uppercase tracking-wide text-slate-500">Selected lane</span>
+                <span className="badge bg-slate-100 text-slate-700">{selectedLaneMeta?.title}</span>
+              </div>
+              <p className="mt-3 text-sm font-semibold">{selectedLaneMeta?.description}</p>
+              <p className="mt-1 text-xs text-slate-500">{lanePricing[selectedLane]}</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {selectedLaneMeta?.badges.map((badge) => (
+                  <span key={badge} className="badge bg-slate-100 text-slate-600">
+                    {badge}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-sand bg-white/70 p-4">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Tips</p>
+              <ul className="mt-2 space-y-2 text-sm text-slate-600">
+                {laneTips[selectedLane].map((tip) => (
+                  <li key={tip}>• {tip}</li>
+                ))}
+              </ul>
+            </div>
+          </>
+        )}
+      </section>
     </div>
   );
 }

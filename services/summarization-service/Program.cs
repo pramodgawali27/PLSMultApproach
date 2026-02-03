@@ -14,40 +14,49 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddHttpClient("docling");
 builder.Services.AddHttpClient("azureopenai");
+builder.Services.AddHttpClient("ollama");
 builder.Services.AddSingleton<CompositeTextExtractor>();
 builder.Services.AddSingleton<DoclingTextExtractor>();
 builder.Services.AddSingleton<ITextExtractor, HybridTextExtractor>();
 builder.Services.AddSingleton<IImageGenerator, AzureOpenAiImageGenerator>();
 builder.Services.AddSingleton<PromptTemplateStore>();
-builder.Services.AddSingleton(sp =>
+var llmProvider = builder.Configuration["LLM_PROVIDER"] ?? "azure";
+if (llmProvider.Equals("ollama", StringComparison.OrdinalIgnoreCase))
 {
-    var configuration = sp.GetRequiredService<IConfiguration>();
-    var endpoint = configuration["AZURE_OPENAI_ENDPOINT"] ?? string.Empty;
-    var deployment = configuration["AZURE_OPENAI_DEPLOYMENT_PROMPT"] ?? string.Empty;
-    var apiKey = configuration["AZURE_OPENAI_KEY"];
-
-    if (string.IsNullOrWhiteSpace(endpoint) || string.IsNullOrWhiteSpace(deployment))
+    builder.Services.AddSingleton<ILLMClient, OllamaLlmClient>();
+}
+else
+{
+    builder.Services.AddSingleton(sp =>
     {
-        throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_DEPLOYMENT_PROMPT are required.");
-    }
+        var configuration = sp.GetRequiredService<IConfiguration>();
+        var endpoint = configuration["AZURE_OPENAI_ENDPOINT"] ?? string.Empty;
+        var deployment = configuration["AZURE_OPENAI_DEPLOYMENT_PROMPT"] ?? string.Empty;
+        var apiKey = configuration["AZURE_OPENAI_KEY"];
 
-    var builder = Kernel.CreateBuilder();
-    if (!string.IsNullOrWhiteSpace(apiKey))
-    {
-        builder.AddAzureOpenAIChatCompletion(deployment, endpoint, apiKey);
-    }
-    else
-    {
-        var clientId = configuration["AZURE_CLIENT_ID"];
-        var credential = string.IsNullOrWhiteSpace(clientId)
-            ? new DefaultAzureCredential()
-            : new DefaultAzureCredential(new DefaultAzureCredentialOptions { ManagedIdentityClientId = clientId });
-        builder.AddAzureOpenAIChatCompletion(deployment, endpoint, credential);
-    }
+        if (string.IsNullOrWhiteSpace(endpoint) || string.IsNullOrWhiteSpace(deployment))
+        {
+            throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_DEPLOYMENT_PROMPT are required.");
+        }
 
-    return builder.Build();
-});
-builder.Services.AddSingleton<ILLMClient, SemanticKernelLlmClient>();
+        var builder = Kernel.CreateBuilder();
+        if (!string.IsNullOrWhiteSpace(apiKey))
+        {
+            builder.AddAzureOpenAIChatCompletion(deployment, endpoint, apiKey);
+        }
+        else
+        {
+            var clientId = configuration["AZURE_CLIENT_ID"];
+            var credential = string.IsNullOrWhiteSpace(clientId)
+                ? new DefaultAzureCredential()
+                : new DefaultAzureCredential(new DefaultAzureCredentialOptions { ManagedIdentityClientId = clientId });
+            builder.AddAzureOpenAIChatCompletion(deployment, endpoint, credential);
+        }
+
+        return builder.Build();
+    });
+    builder.Services.AddSingleton<ILLMClient, SemanticKernelLlmClient>();
+}
 builder.Services.AddSingleton(GuardrailPolicyLoader.Load(builder.Configuration));
 builder.Services.AddSingleton<GuardrailEvaluator>();
 
@@ -83,8 +92,10 @@ app.MapPost("/internal/summarize", async (
 
     var savedImages = ImagePersistence.Save(extraction.Value.Images, request.DocumentId, request.StorageUri);
 
+    var provider = configuration["LLM_PROVIDER"] ?? "azure";
     var guardrailResult = guardrails.Evaluate(request.Lane, extraction.Value.Text);
-    if (guardrailResult.FinalDecision == "block")
+    if (!provider.Equals("ollama", StringComparison.OrdinalIgnoreCase)
+        && guardrailResult.FinalDecision == "block")
     {
         return Results.BadRequest("Guardrail policy blocked summarization.");
     }

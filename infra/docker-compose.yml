@@ -63,6 +63,9 @@ services:
       context: ..
       dockerfile: services/summarization-service/Dockerfile
     environment:
+      LLM_PROVIDER: ${LLM_PROVIDER:-azure}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama2:latest}
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://0.0.0.0:8080
       DOCLING_URL: http://docling-service:8080

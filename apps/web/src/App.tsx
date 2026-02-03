@@ -1,9 +1,10 @@
-import { Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider, RequireAuth } from "./components/AuthProvider";
 import Layout from "./components/Layout";
 import Dashboard from "./pages/Dashboard";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
+import Settings from "./pages/Settings";
 import SummaryDetail from "./pages/SummaryDetail";
 
 export default function App() {
@@ -11,8 +12,9 @@ export default function App() {
     <AuthProvider>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/" element={<Navigate to="/app" replace />} />
         <Route
-          path="/"
+          path="/app"
           element={
             <RequireAuth>
               <Layout>
@@ -22,7 +24,7 @@ export default function App() {
           }
         />
         <Route
-          path="/dashboard"
+          path="/app/dashboard"
           element={
             <RequireAuth>
               <Layout>
@@ -32,11 +34,21 @@ export default function App() {
           }
         />
         <Route
-          path="/summaries/:summaryId"
+          path="/app/summaries/:summaryId"
           element={
             <RequireAuth>
               <Layout>
                 <SummaryDetail />
+              </Layout>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/app/settings"
+          element={
+            <RequireAuth>
+              <Layout>
+                <Settings />
               </Layout>
             </RequireAuth>
           }

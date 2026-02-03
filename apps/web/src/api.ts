@@ -1,5 +1,16 @@
 export type SummaryLane = "LaneA" | "LaneB" | "LaneC" | "LaneD";
 export type JobStatus = "Queued" | "Processing" | "Completed" | "Failed";
+export type Audience = "Patients" | "General public" | "Healthcare professionals";
+
+export type EntitlementFeature = {
+  images?: boolean;
+  citations?: boolean;
+};
+
+export type EntitlementsResponse = {
+  enabledLanes: SummaryLane[];
+  features?: EntitlementFeature;
+};
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5072";
 
@@ -20,7 +31,7 @@ export async function devLogin(email: string, tenantName: string) {
   return response.json();
 }
 
-export async function fetchEntitlements(): Promise<SummaryLane[]> {
+export async function fetchEntitlements(): Promise<EntitlementsResponse> {
   const response = await fetch(`${API_BASE}/api/entitlements`, {
     headers: { ...authHeaders() }
   });
@@ -28,12 +39,26 @@ export async function fetchEntitlements(): Promise<SummaryLane[]> {
     throw new Error("Failed to load entitlements");
   }
   const data = await response.json();
-  return data.enabledLanes as SummaryLane[];
+  if (Array.isArray(data)) {
+    return { enabledLanes: data as SummaryLane[] };
+  }
+  return {
+    enabledLanes: (data.enabledLanes ?? []) as SummaryLane[],
+    features: data.features
+  };
 }
 
-export async function uploadDocument(file: File, lane: SummaryLane, promptOverride?: string) {
+export async function uploadDocument(
+  file: File,
+  lane: SummaryLane,
+  promptOverride?: string,
+  metadata?: { title?: string; therapeuticArea?: string; audience?: Audience }
+) {
   const form = new FormData();
   form.append("file", file);
+  if (metadata?.title) form.append("title", metadata.title);
+  if (metadata?.therapeuticArea) form.append("therapeuticArea", metadata.therapeuticArea);
+  if (metadata?.audience) form.append("audience", metadata.audience);
   if (promptOverride) {
     form.append("promptOverride", promptOverride);
   }

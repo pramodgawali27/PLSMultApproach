@@ -19,7 +19,7 @@ export default function Login() {
     try {
       const data = await devLogin(email, tenantName);
       setToken(data.accessToken);
-      navigate("/");
+      navigate("/app");
     } catch (err) {
       setError("Unable to sign in. Check the dev API is running.");
     } finally {

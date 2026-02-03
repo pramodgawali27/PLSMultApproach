@@ -37,3 +37,4 @@ npm run dev
 - Dev login issues a local JWT for UI use.
 - Lane A is implemented; other lanes return "not implemented".
 - For Azure OpenAI, export env vars like `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT_PROMPT`, and `AZURE_OPENAI_KEY`.
+- To use Ollama locally, set `LLM_PROVIDER=ollama` and optionally `OLLAMA_BASE_URL` (default `http://host.docker.internal:11434`) and `OLLAMA_MODEL` (default `llama3.1`).

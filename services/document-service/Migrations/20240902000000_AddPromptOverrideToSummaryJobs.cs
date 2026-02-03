@@ -1,9 +1,13 @@
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using PLS.BuildingBlocks.Data;
 
 #nullable disable
 
 namespace DocumentService.Migrations;
 
+[DbContext(typeof(PlsDbContext))]
+[Migration("20240902000000_AddPromptOverrideToSummaryJobs")]
 public partial class AddPromptOverrideToSummaryJobs : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
