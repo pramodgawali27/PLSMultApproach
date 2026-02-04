@@ -28,9 +28,6 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Azure CLI setup
-        uses: azure/cli@v2
-
       - name: Create resource group (if needed)
         run: |
           az group create --name "$RESOURCE_GROUP" --location "$LOCATION"
