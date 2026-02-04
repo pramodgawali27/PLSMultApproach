@@ -61,13 +61,17 @@ jobs:
       - name: Deploy/Update Summarization Service (internal)
         run: |
           if az containerapp show -g "$RESOURCE_GROUP" -n pls-summarization-service >/dev/null 2>&1; then
+            az containerapp registry set \
+              -n pls-summarization-service \
+              -g "$RESOURCE_GROUP" \
+              --server "${{ secrets.ACR_LOGIN_SERVER }}" \
+              --username "${{ secrets.ACR_USERNAME }}" \
+              --password "${{ secrets.ACR_PASSWORD }}"
+
             az containerapp update \
               --name pls-summarization-service \
               --resource-group "$RESOURCE_GROUP" \
               --image "${{ secrets.ACR_LOGIN_SERVER }}/pls-summarization-service:${IMAGE_TAG}" \
-              --registry-server "${{ secrets.ACR_LOGIN_SERVER }}" \
-              --registry-username "${{ secrets.ACR_USERNAME }}" \
-              --registry-password "${{ secrets.ACR_PASSWORD }}" \
               --set-env-vars \
                 ASPNETCORE_ENVIRONMENT=Production \
                 AZURE_OPENAI_ENDPOINT="${{ secrets.AZURE_OPENAI_ENDPOINT }}" \
@@ -106,13 +110,17 @@ jobs:
       - name: Deploy/Update Orchestrator Service (internal)
         run: |
           if az containerapp show -g "$RESOURCE_GROUP" -n pls-orchestrator-service >/dev/null 2>&1; then
+            az containerapp registry set \
+              -n pls-orchestrator-service \
+              -g "$RESOURCE_GROUP" \
+              --server "${{ secrets.ACR_LOGIN_SERVER }}" \
+              --username "${{ secrets.ACR_USERNAME }}" \
+              --password "${{ secrets.ACR_PASSWORD }}"
+
             az containerapp update \
               --name pls-orchestrator-service \
               --resource-group "$RESOURCE_GROUP" \
               --image "${{ secrets.ACR_LOGIN_SERVER }}/pls-orchestrator-service:${IMAGE_TAG}" \
-              --registry-server "${{ secrets.ACR_LOGIN_SERVER }}" \
-              --registry-username "${{ secrets.ACR_USERNAME }}" \
-              --registry-password "${{ secrets.ACR_PASSWORD }}" \
               --set-env-vars \
                 ASPNETCORE_ENVIRONMENT=Production \
                 ConnectionStrings__Postgres="${{ secrets.POSTGRES_CONN }}" \
@@ -138,13 +146,17 @@ jobs:
       - name: Deploy/Update Document Service (external)
         run: |
           if az containerapp show -g "$RESOURCE_GROUP" -n pls-document-service >/dev/null 2>&1; then
+            az containerapp registry set \
+              -n pls-document-service \
+              -g "$RESOURCE_GROUP" \
+              --server "${{ secrets.ACR_LOGIN_SERVER }}" \
+              --username "${{ secrets.ACR_USERNAME }}" \
+              --password "${{ secrets.ACR_PASSWORD }}"
+
             az containerapp update \
               --name pls-document-service \
               --resource-group "$RESOURCE_GROUP" \
               --image "${{ secrets.ACR_LOGIN_SERVER }}/pls-document-service:${IMAGE_TAG}" \
-              --registry-server "${{ secrets.ACR_LOGIN_SERVER }}" \
-              --registry-username "${{ secrets.ACR_USERNAME }}" \
-              --registry-password "${{ secrets.ACR_PASSWORD }}" \
               --set-env-vars \
                 ASPNETCORE_ENVIRONMENT=Production \
                 ConnectionStrings__Postgres="${{ secrets.POSTGRES_CONN }}" \
@@ -172,13 +184,17 @@ jobs:
       - name: Deploy/Update Web (external)
         run: |
           if az containerapp show -g "$RESOURCE_GROUP" -n pls-web >/dev/null 2>&1; then
+            az containerapp registry set \
+              -n pls-web \
+              -g "$RESOURCE_GROUP" \
+              --server "${{ secrets.ACR_LOGIN_SERVER }}" \
+              --username "${{ secrets.ACR_USERNAME }}" \
+              --password "${{ secrets.ACR_PASSWORD }}"
+
             az containerapp update \
               --name pls-web \
               --resource-group "$RESOURCE_GROUP" \
               --image "${{ secrets.ACR_LOGIN_SERVER }}/pls-web:${IMAGE_TAG}" \
-              --registry-server "${{ secrets.ACR_LOGIN_SERVER }}" \
-              --registry-username "${{ secrets.ACR_USERNAME }}" \
-              --registry-password "${{ secrets.ACR_PASSWORD }}" \
               --set-env-vars \
                 VITE_API_BASE_URL="${{ secrets.API_BASE_URL }}"
           else
