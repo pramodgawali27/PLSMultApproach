@@ -60,18 +60,33 @@ jobs:
       # 1) Deploy Summarization FIRST (internal) so we can resolve its internal URL
       - name: Deploy/Update Summarization Service (internal)
         run: |
-          if az containerapp show -g "$RESOURCE_GROUP" -n pls-summarization-service >/dev/null 2>&1; then
+          set -e
+          APP_NAME="pls-summarization-service"
+          IMAGE="${{ secrets.ACR_LOGIN_SERVER }}/pls-summarization-service:${IMAGE_TAG}"
+
+          EXISTS=$(az resource show -g "$RESOURCE_GROUP" -n "$APP_NAME" --resource-type Microsoft.App/containerApps --query name -o tsv 2>/dev/null || true)
+          if [ -n "$EXISTS" ]; then
+            STATE=$(az resource show -g "$RESOURCE_GROUP" -n "$APP_NAME" --resource-type Microsoft.App/containerApps --query properties.provisioningState -o tsv 2>/dev/null || echo "Unknown")
+            echo "$APP_NAME provisioningState=$STATE"
+            if [ "$STATE" = "Failed" ]; then
+              echo "Deleting failed app $APP_NAME so we can recreate cleanly..."
+              az containerapp delete -g "$RESOURCE_GROUP" -n "$APP_NAME" --yes
+              EXISTS=""
+            fi
+          fi
+
+          if [ -n "$EXISTS" ]; then
             az containerapp registry set \
-              -n pls-summarization-service \
+              -n "$APP_NAME" \
               -g "$RESOURCE_GROUP" \
               --server "${{ secrets.ACR_LOGIN_SERVER }}" \
               --username "${{ secrets.ACR_USERNAME }}" \
               --password "${{ secrets.ACR_PASSWORD }}"
 
             az containerapp update \
-              --name pls-summarization-service \
+              --name "$APP_NAME" \
               --resource-group "$RESOURCE_GROUP" \
-              --image "${{ secrets.ACR_LOGIN_SERVER }}/pls-summarization-service:${IMAGE_TAG}" \
+              --image "$IMAGE" \
               --set-env-vars \
                 ASPNETCORE_ENVIRONMENT=Production \
                 AZURE_OPENAI_ENDPOINT="${{ secrets.AZURE_OPENAI_ENDPOINT }}" \
@@ -82,10 +97,10 @@ jobs:
                 AZURE_OPENAI_DEPLOYMENT_IMAGE="${{ secrets.AZURE_OPENAI_DEPLOYMENT_IMAGE }}"
           else
             az containerapp create \
-              --name pls-summarization-service \
+              --name "$APP_NAME" \
               --resource-group "$RESOURCE_GROUP" \
               --environment "$ACA_ENV" \
-              --image "${{ secrets.ACR_LOGIN_SERVER }}/pls-summarization-service:${IMAGE_TAG}" \
+              --image "$IMAGE" \
               --registry-server "${{ secrets.ACR_LOGIN_SERVER }}" \
               --registry-username "${{ secrets.ACR_USERNAME }}" \
               --registry-password "${{ secrets.ACR_PASSWORD }}" \
@@ -109,28 +124,43 @@ jobs:
       # 2) Deploy Orchestrator (internal) using SUMMARIZATION_URL
       - name: Deploy/Update Orchestrator Service (internal)
         run: |
-          if az containerapp show -g "$RESOURCE_GROUP" -n pls-orchestrator-service >/dev/null 2>&1; then
+          set -e
+          APP_NAME="pls-orchestrator-service"
+          IMAGE="${{ secrets.ACR_LOGIN_SERVER }}/pls-orchestrator-service:${IMAGE_TAG}"
+
+          EXISTS=$(az resource show -g "$RESOURCE_GROUP" -n "$APP_NAME" --resource-type Microsoft.App/containerApps --query name -o tsv 2>/dev/null || true)
+          if [ -n "$EXISTS" ]; then
+            STATE=$(az resource show -g "$RESOURCE_GROUP" -n "$APP_NAME" --resource-type Microsoft.App/containerApps --query properties.provisioningState -o tsv 2>/dev/null || echo "Unknown")
+            echo "$APP_NAME provisioningState=$STATE"
+            if [ "$STATE" = "Failed" ]; then
+              echo "Deleting failed app $APP_NAME so we can recreate cleanly..."
+              az containerapp delete -g "$RESOURCE_GROUP" -n "$APP_NAME" --yes
+              EXISTS=""
+            fi
+          fi
+
+          if [ -n "$EXISTS" ]; then
             az containerapp registry set \
-              -n pls-orchestrator-service \
+              -n "$APP_NAME" \
               -g "$RESOURCE_GROUP" \
               --server "${{ secrets.ACR_LOGIN_SERVER }}" \
               --username "${{ secrets.ACR_USERNAME }}" \
               --password "${{ secrets.ACR_PASSWORD }}"
 
             az containerapp update \
-              --name pls-orchestrator-service \
+              --name "$APP_NAME" \
               --resource-group "$RESOURCE_GROUP" \
-              --image "${{ secrets.ACR_LOGIN_SERVER }}/pls-orchestrator-service:${IMAGE_TAG}" \
+              --image "$IMAGE" \
               --set-env-vars \
                 ASPNETCORE_ENVIRONMENT=Production \
                 ConnectionStrings__Postgres="${{ secrets.POSTGRES_CONN }}" \
                 SummarizationService__BaseUrl="$SUMMARIZATION_URL"
           else
             az containerapp create \
-              --name pls-orchestrator-service \
+              --name "$APP_NAME" \
               --resource-group "$RESOURCE_GROUP" \
               --environment "$ACA_ENV" \
-              --image "${{ secrets.ACR_LOGIN_SERVER }}/pls-orchestrator-service:${IMAGE_TAG}" \
+              --image "$IMAGE" \
               --registry-server "${{ secrets.ACR_LOGIN_SERVER }}" \
               --registry-username "${{ secrets.ACR_USERNAME }}" \
               --registry-password "${{ secrets.ACR_PASSWORD }}" \
@@ -145,18 +175,33 @@ jobs:
       # 3) Deploy Document Service (external) using SUMMARIZATION_URL
       - name: Deploy/Update Document Service (external)
         run: |
-          if az containerapp show -g "$RESOURCE_GROUP" -n pls-document-service >/dev/null 2>&1; then
+          set -e
+          APP_NAME="pls-document-service"
+          IMAGE="${{ secrets.ACR_LOGIN_SERVER }}/pls-document-service:${IMAGE_TAG}"
+
+          EXISTS=$(az resource show -g "$RESOURCE_GROUP" -n "$APP_NAME" --resource-type Microsoft.App/containerApps --query name -o tsv 2>/dev/null || true)
+          if [ -n "$EXISTS" ]; then
+            STATE=$(az resource show -g "$RESOURCE_GROUP" -n "$APP_NAME" --resource-type Microsoft.App/containerApps --query properties.provisioningState -o tsv 2>/dev/null || echo "Unknown")
+            echo "$APP_NAME provisioningState=$STATE"
+            if [ "$STATE" = "Failed" ]; then
+              echo "Deleting failed app $APP_NAME so we can recreate cleanly..."
+              az containerapp delete -g "$RESOURCE_GROUP" -n "$APP_NAME" --yes
+              EXISTS=""
+            fi
+          fi
+
+          if [ -n "$EXISTS" ]; then
             az containerapp registry set \
-              -n pls-document-service \
+              -n "$APP_NAME" \
               -g "$RESOURCE_GROUP" \
               --server "${{ secrets.ACR_LOGIN_SERVER }}" \
               --username "${{ secrets.ACR_USERNAME }}" \
               --password "${{ secrets.ACR_PASSWORD }}"
 
             az containerapp update \
-              --name pls-document-service \
+              --name "$APP_NAME" \
               --resource-group "$RESOURCE_GROUP" \
-              --image "${{ secrets.ACR_LOGIN_SERVER }}/pls-document-service:${IMAGE_TAG}" \
+              --image "$IMAGE" \
               --set-env-vars \
                 ASPNETCORE_ENVIRONMENT=Production \
                 ConnectionStrings__Postgres="${{ secrets.POSTGRES_CONN }}" \
@@ -164,10 +209,10 @@ jobs:
                 LocalStorage__BasePath=/data/storage
           else
             az containerapp create \
-              --name pls-document-service \
+              --name "$APP_NAME" \
               --resource-group "$RESOURCE_GROUP" \
               --environment "$ACA_ENV" \
-              --image "${{ secrets.ACR_LOGIN_SERVER }}/pls-document-service:${IMAGE_TAG}" \
+              --image "$IMAGE" \
               --registry-server "${{ secrets.ACR_LOGIN_SERVER }}" \
               --registry-username "${{ secrets.ACR_USERNAME }}" \
               --registry-password "${{ secrets.ACR_PASSWORD }}" \
@@ -183,26 +228,41 @@ jobs:
       # 4) Deploy Web (external)
       - name: Deploy/Update Web (external)
         run: |
-          if az containerapp show -g "$RESOURCE_GROUP" -n pls-web >/dev/null 2>&1; then
+          set -e
+          APP_NAME="pls-web"
+          IMAGE="${{ secrets.ACR_LOGIN_SERVER }}/pls-web:${IMAGE_TAG}"
+
+          EXISTS=$(az resource show -g "$RESOURCE_GROUP" -n "$APP_NAME" --resource-type Microsoft.App/containerApps --query name -o tsv 2>/dev/null || true)
+          if [ -n "$EXISTS" ]; then
+            STATE=$(az resource show -g "$RESOURCE_GROUP" -n "$APP_NAME" --resource-type Microsoft.App/containerApps --query properties.provisioningState -o tsv 2>/dev/null || echo "Unknown")
+            echo "$APP_NAME provisioningState=$STATE"
+            if [ "$STATE" = "Failed" ]; then
+              echo "Deleting failed app $APP_NAME so we can recreate cleanly..."
+              az containerapp delete -g "$RESOURCE_GROUP" -n "$APP_NAME" --yes
+              EXISTS=""
+            fi
+          fi
+
+          if [ -n "$EXISTS" ]; then
             az containerapp registry set \
-              -n pls-web \
+              -n "$APP_NAME" \
               -g "$RESOURCE_GROUP" \
               --server "${{ secrets.ACR_LOGIN_SERVER }}" \
               --username "${{ secrets.ACR_USERNAME }}" \
               --password "${{ secrets.ACR_PASSWORD }}"
 
             az containerapp update \
-              --name pls-web \
+              --name "$APP_NAME" \
               --resource-group "$RESOURCE_GROUP" \
-              --image "${{ secrets.ACR_LOGIN_SERVER }}/pls-web:${IMAGE_TAG}" \
+              --image "$IMAGE" \
               --set-env-vars \
                 VITE_API_BASE_URL="${{ secrets.API_BASE_URL }}"
           else
             az containerapp create \
-              --name pls-web \
+              --name "$APP_NAME" \
               --resource-group "$RESOURCE_GROUP" \
               --environment "$ACA_ENV" \
-              --image "${{ secrets.ACR_LOGIN_SERVER }}/pls-web:${IMAGE_TAG}" \
+              --image "$IMAGE" \
               --registry-server "${{ secrets.ACR_LOGIN_SERVER }}" \
               --registry-username "${{ secrets.ACR_USERNAME }}" \
               --registry-password "${{ secrets.ACR_PASSWORD }}" \
