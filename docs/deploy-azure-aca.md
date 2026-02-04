@@ -76,6 +76,36 @@ Update `API_BASE_URL` secret to the document-service FQDN:
 https://<document-service-fqdn>
 ```
 
+## Runtime API base config for web (no rebuild)
+The web UI reads `/config.json` at runtime. Use an ACA config map to override it.
+
+1) Create a local `prod-config.json`:
+```json
+{ "apiBaseUrl": "https://api.yourdomain.com" }
+```
+
+2) Create/update the config map:
+```bash
+az containerapp configmap set \
+  --name <web-app> \
+  --resource-group <rg> \
+  --key config.json \
+  --value "$(cat prod-config.json)"
+```
+
+3) Mount it into the web container:
+```bash
+az containerapp update \
+  --name <web-app> \
+  --resource-group <rg> \
+  --set \
+  "template.volumes[0].name=config" \
+  "template.volumes[0].configMap.name=<web-app>-configmap" \
+  "template.containers[0].volumeMounts[0].volumeName=config" \
+  "template.containers[0].volumeMounts[0].mountPath=/app/public" \
+  "template.containers[0].volumeMounts[0].readOnly=true"
+```
+
 ## Notes
 - This is demo‑grade and does not include managed Postgres provisioning.
 - For prod, use Azure Database for PostgreSQL and managed identities.

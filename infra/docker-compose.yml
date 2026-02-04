@@ -101,9 +101,7 @@ services:
       context: ..
       dockerfile: apps/web/Dockerfile
     environment:
-      VITE_API_BASE_URL: http://localhost:5072
-    ports:
-      - "5173:5173"
+      VITE_API_BASE_URL: https://pls-document-service.happydune-0689c206.eastus.azurecontainerapps.io
     depends_on:
       - document-service
 

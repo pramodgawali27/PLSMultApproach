@@ -12,7 +12,31 @@ export type EntitlementsResponse = {
   features?: EntitlementFeature;
 };
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5072";
+type RuntimeConfig = {
+  apiBaseUrl?: string;
+};
+
+let runtimeConfig: RuntimeConfig | null = null;
+let runtimeConfigPromise: Promise<RuntimeConfig> | null = null;
+
+async function loadRuntimeConfig(): Promise<RuntimeConfig> {
+  if (runtimeConfig) return runtimeConfig;
+  if (!runtimeConfigPromise) {
+    runtimeConfigPromise = fetch("/config.json", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : {}))
+      .catch(() => ({}))
+      .then((config) => {
+        runtimeConfig = config as RuntimeConfig;
+        return runtimeConfig;
+      });
+  }
+  return runtimeConfigPromise;
+}
+
+async function getApiBase(): Promise<string> {
+  const config = await loadRuntimeConfig();
+  return config.apiBaseUrl ?? import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5072";
+}
 
 function authHeaders() {
   const token = localStorage.getItem("pls_token");
@@ -20,7 +44,8 @@ function authHeaders() {
 }
 
 export async function devLogin(email: string, tenantName: string) {
-  const response = await fetch(`${API_BASE}/api/auth/dev-login`, {
+  const apiBase = await getApiBase();
+  const response = await fetch(`${apiBase}/api/auth/dev-login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, tenantName })
@@ -32,7 +57,8 @@ export async function devLogin(email: string, tenantName: string) {
 }
 
 export async function fetchEntitlements(): Promise<EntitlementsResponse> {
-  const response = await fetch(`${API_BASE}/api/entitlements`, {
+  const apiBase = await getApiBase();
+  const response = await fetch(`${apiBase}/api/entitlements`, {
     headers: { ...authHeaders() }
   });
   if (!response.ok) {
@@ -54,6 +80,7 @@ export async function uploadDocument(
   promptOverride?: string,
   metadata?: { title?: string; therapeuticArea?: string; audience?: Audience }
 ) {
+  const apiBase = await getApiBase();
   const form = new FormData();
   form.append("file", file);
   if (metadata?.title) form.append("title", metadata.title);
@@ -62,7 +89,7 @@ export async function uploadDocument(
   if (promptOverride) {
     form.append("promptOverride", promptOverride);
   }
-  const response = await fetch(`${API_BASE}/api/documents/upload?lane=${lane}`, {
+  const response = await fetch(`${apiBase}/api/documents/upload?lane=${lane}`, {
     method: "POST",
     headers: { ...authHeaders() },
     body: form
@@ -74,7 +101,8 @@ export async function uploadDocument(
 }
 
 export async function fetchPromptTemplate(lane: SummaryLane) {
-  const response = await fetch(`${API_BASE}/api/prompts/${lane}`, {
+  const apiBase = await getApiBase();
+  const response = await fetch(`${apiBase}/api/prompts/${lane}`, {
     headers: { ...authHeaders() }
   });
   if (!response.ok) {
@@ -84,7 +112,8 @@ export async function fetchPromptTemplate(lane: SummaryLane) {
 }
 
 export async function generateSummary(documentId: string, lane: SummaryLane) {
-  const response = await fetch(`${API_BASE}/api/summaries/${documentId}/generate?lane=${lane}`, {
+  const apiBase = await getApiBase();
+  const response = await fetch(`${apiBase}/api/summaries/${documentId}/generate?lane=${lane}`, {
     method: "POST",
     headers: { ...authHeaders() }
   });
@@ -95,7 +124,8 @@ export async function generateSummary(documentId: string, lane: SummaryLane) {
 }
 
 export async function fetchJob(jobId: string) {
-  const response = await fetch(`${API_BASE}/api/jobs/${jobId}`, {
+  const apiBase = await getApiBase();
+  const response = await fetch(`${apiBase}/api/jobs/${jobId}`, {
     headers: { ...authHeaders() }
   });
   if (!response.ok) {
@@ -109,7 +139,8 @@ export async function fetchSummaries(params: {
   lane?: SummaryLane;
   status?: JobStatus;
 }) {
-  const url = new URL(`${API_BASE}/api/summaries`);
+  const apiBase = await getApiBase();
+  const url = new URL(`${apiBase}/api/summaries`);
   if (params.search) url.searchParams.set("search", params.search);
   if (params.lane) url.searchParams.set("lane", params.lane);
   if (params.status) url.searchParams.set("status", params.status);
@@ -124,7 +155,8 @@ export async function fetchSummaries(params: {
 }
 
 export async function fetchSummary(summaryId: string) {
-  const response = await fetch(`${API_BASE}/api/summaries/${summaryId}`, {
+  const apiBase = await getApiBase();
+  const response = await fetch(`${apiBase}/api/summaries/${summaryId}`, {
     headers: { ...authHeaders() }
   });
   if (!response.ok) {
@@ -134,7 +166,8 @@ export async function fetchSummary(summaryId: string) {
 }
 
 export async function downloadSummary(summaryId: string, format: "pdf" | "docx") {
-  const response = await fetch(`${API_BASE}/api/summaries/${summaryId}/download?format=${format}`, {
+  const apiBase = await getApiBase();
+  const response = await fetch(`${apiBase}/api/summaries/${summaryId}/download?format=${format}`, {
     headers: { ...authHeaders() }
   });
   if (!response.ok) {

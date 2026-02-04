@@ -68,6 +68,8 @@ Use the login page (dev auth). The JWT is stored in local storage as `pls_token`
 ## Docs
 - Architecture: `docs/architecture.md`
 - API: `docs/api.md`
+- Production config reference: `docs/prod-config.md`
+- Azure Container Apps deployment: `docs/deploy-azure-aca.md`
 - Threat model: `docs/threat-model.md`
 - Run local: `docs/run-local.md`
 - Compliance tests: `docs/compliance-tests.md`

@@ -7,6 +7,7 @@ COPY apps/web/tsconfig.node.json ./
 COPY apps/web/postcss.config.cjs ./
 COPY apps/web/tailwind.config.ts ./
 COPY apps/web/index.html ./
+COPY apps/web/public ./public
 COPY apps/web/src ./src
 RUN npm install
 EXPOSE 5173

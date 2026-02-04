@@ -12,6 +12,8 @@ Frontend for the PLS platform.
 
 ## Config
 - `VITE_API_BASE_URL` (default: `http://localhost:5072`)
+- Runtime override: `apps/web/public/config.json` with `apiBaseUrl`.
+  - This lets you change API URL in production without rebuilding the UI.
 
 ## Local Dev
 ```bash
