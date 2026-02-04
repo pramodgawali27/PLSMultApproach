@@ -42,7 +42,7 @@ jobs:
           az containerapp env show --name "$ACA_ENV" --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1 \
             || az containerapp env create --name "$ACA_ENV" --resource-group "$RESOURCE_GROUP" --location "$LOCATION"
 
-      - name: Login to ACR
+      - name: Login to ACR (for build/push)
         run: |
           echo "${{ secrets.ACR_PASSWORD }}" | docker login "${{ secrets.ACR_LOGIN_SERVER }}" -u "${{ secrets.ACR_USERNAME }}" --password-stdin
 
@@ -57,61 +57,148 @@ jobs:
           docker push "${{ secrets.ACR_LOGIN_SERVER }}/pls-summarization-service:${IMAGE_TAG}"
           docker push "${{ secrets.ACR_LOGIN_SERVER }}/pls-web:${IMAGE_TAG}"
 
-      - name: Deploy Document Service
+      # 1) Deploy Summarization FIRST (internal) so we can resolve its internal URL
+      - name: Deploy/Update Summarization Service (internal)
         run: |
-          az containerapp create \
-            --name pls-document-service \
-            --resource-group "$RESOURCE_GROUP" \
-            --environment "$ACA_ENV" \
-            --image "${{ secrets.ACR_LOGIN_SERVER }}/pls-document-service:${IMAGE_TAG}" \
-            --ingress external \
-            --target-port 8080 \
-            --env-vars \
-              ASPNETCORE_ENVIRONMENT=Production \
-              ConnectionStrings__Postgres="${{ secrets.POSTGRES_CONN }}" \
-              SummarizationService__BaseUrl="${{ secrets.SUMMARIZATION_URL }}" \
-              LocalStorage__BasePath=/data/storage
+          if az containerapp show -g "$RESOURCE_GROUP" -n pls-summarization-service >/dev/null 2>&1; then
+            az containerapp update \
+              --name pls-summarization-service \
+              --resource-group "$RESOURCE_GROUP" \
+              --image "${{ secrets.ACR_LOGIN_SERVER }}/pls-summarization-service:${IMAGE_TAG}" \
+              --registry-server "${{ secrets.ACR_LOGIN_SERVER }}" \
+              --registry-username "${{ secrets.ACR_USERNAME }}" \
+              --registry-password "${{ secrets.ACR_PASSWORD }}" \
+              --set-env-vars \
+                ASPNETCORE_ENVIRONMENT=Production \
+                AZURE_OPENAI_ENDPOINT="${{ secrets.AZURE_OPENAI_ENDPOINT }}" \
+                AZURE_OPENAI_KEY="${{ secrets.AZURE_OPENAI_KEY }}" \
+                AZURE_OPENAI_DEPLOYMENT_PROMPT="${{ secrets.AZURE_OPENAI_DEPLOYMENT_PROMPT }}" \
+                AZURE_OPENAI_DEPLOYMENT_FINETUNE="${{ secrets.AZURE_OPENAI_DEPLOYMENT_FINETUNE }}" \
+                AZURE_OPENAI_DEPLOYMENT_AGENT="${{ secrets.AZURE_OPENAI_DEPLOYMENT_AGENT }}" \
+                AZURE_OPENAI_DEPLOYMENT_IMAGE="${{ secrets.AZURE_OPENAI_DEPLOYMENT_IMAGE }}"
+          else
+            az containerapp create \
+              --name pls-summarization-service \
+              --resource-group "$RESOURCE_GROUP" \
+              --environment "$ACA_ENV" \
+              --image "${{ secrets.ACR_LOGIN_SERVER }}/pls-summarization-service:${IMAGE_TAG}" \
+              --registry-server "${{ secrets.ACR_LOGIN_SERVER }}" \
+              --registry-username "${{ secrets.ACR_USERNAME }}" \
+              --registry-password "${{ secrets.ACR_PASSWORD }}" \
+              --ingress internal \
+              --target-port 8080 \
+              --env-vars \
+                ASPNETCORE_ENVIRONMENT=Production \
+                AZURE_OPENAI_ENDPOINT="${{ secrets.AZURE_OPENAI_ENDPOINT }}" \
+                AZURE_OPENAI_KEY="${{ secrets.AZURE_OPENAI_KEY }}" \
+                AZURE_OPENAI_DEPLOYMENT_PROMPT="${{ secrets.AZURE_OPENAI_DEPLOYMENT_PROMPT }}" \
+                AZURE_OPENAI_DEPLOYMENT_FINETUNE="${{ secrets.AZURE_OPENAI_DEPLOYMENT_FINETUNE }}" \
+                AZURE_OPENAI_DEPLOYMENT_AGENT="${{ secrets.AZURE_OPENAI_DEPLOYMENT_AGENT }}" \
+                AZURE_OPENAI_DEPLOYMENT_IMAGE="${{ secrets.AZURE_OPENAI_DEPLOYMENT_IMAGE }}"
+          fi
 
-      - name: Deploy Orchestrator Service
+      - name: Resolve Summarization internal URL
         run: |
-          az containerapp create \
-            --name pls-orchestrator-service \
-            --resource-group "$RESOURCE_GROUP" \
-            --environment "$ACA_ENV" \
-            --image "${{ secrets.ACR_LOGIN_SERVER }}/pls-orchestrator-service:${IMAGE_TAG}" \
-            --ingress internal \
-            --target-port 8080 \
-            --env-vars \
-              ASPNETCORE_ENVIRONMENT=Production \
-              ConnectionStrings__Postgres="${{ secrets.POSTGRES_CONN }}" \
-              SummarizationService__BaseUrl="${{ secrets.SUMMARIZATION_URL }}"
+          FQDN=$(az containerapp show -g "$RESOURCE_GROUP" -n pls-summarization-service --query properties.configuration.ingress.fqdn -o tsv)
+          echo "SUMMARIZATION_URL=https://${FQDN}" >> $GITHUB_ENV
 
-      - name: Deploy Summarization Service
+      # 2) Deploy Orchestrator (internal) using SUMMARIZATION_URL
+      - name: Deploy/Update Orchestrator Service (internal)
         run: |
-          az containerapp create \
-            --name pls-summarization-service \
-            --resource-group "$RESOURCE_GROUP" \
-            --environment "$ACA_ENV" \
-            --image "${{ secrets.ACR_LOGIN_SERVER }}/pls-summarization-service:${IMAGE_TAG}" \
-            --ingress internal \
-            --target-port 8080 \
-            --env-vars \
-              ASPNETCORE_ENVIRONMENT=Production \
-              AZURE_OPENAI_ENDPOINT="${{ secrets.AZURE_OPENAI_ENDPOINT }}" \
-              AZURE_OPENAI_KEY="${{ secrets.AZURE_OPENAI_KEY }}" \
-              AZURE_OPENAI_DEPLOYMENT_PROMPT="${{ secrets.AZURE_OPENAI_DEPLOYMENT_PROMPT }}" \
-              AZURE_OPENAI_DEPLOYMENT_FINETUNE="${{ secrets.AZURE_OPENAI_DEPLOYMENT_FINETUNE }}" \
-              AZURE_OPENAI_DEPLOYMENT_AGENT="${{ secrets.AZURE_OPENAI_DEPLOYMENT_AGENT }}" \
-              AZURE_OPENAI_DEPLOYMENT_IMAGE="${{ secrets.AZURE_OPENAI_DEPLOYMENT_IMAGE }}"
+          if az containerapp show -g "$RESOURCE_GROUP" -n pls-orchestrator-service >/dev/null 2>&1; then
+            az containerapp update \
+              --name pls-orchestrator-service \
+              --resource-group "$RESOURCE_GROUP" \
+              --image "${{ secrets.ACR_LOGIN_SERVER }}/pls-orchestrator-service:${IMAGE_TAG}" \
+              --registry-server "${{ secrets.ACR_LOGIN_SERVER }}" \
+              --registry-username "${{ secrets.ACR_USERNAME }}" \
+              --registry-password "${{ secrets.ACR_PASSWORD }}" \
+              --set-env-vars \
+                ASPNETCORE_ENVIRONMENT=Production \
+                ConnectionStrings__Postgres="${{ secrets.POSTGRES_CONN }}" \
+                SummarizationService__BaseUrl="$SUMMARIZATION_URL"
+          else
+            az containerapp create \
+              --name pls-orchestrator-service \
+              --resource-group "$RESOURCE_GROUP" \
+              --environment "$ACA_ENV" \
+              --image "${{ secrets.ACR_LOGIN_SERVER }}/pls-orchestrator-service:${IMAGE_TAG}" \
+              --registry-server "${{ secrets.ACR_LOGIN_SERVER }}" \
+              --registry-username "${{ secrets.ACR_USERNAME }}" \
+              --registry-password "${{ secrets.ACR_PASSWORD }}" \
+              --ingress internal \
+              --target-port 8080 \
+              --env-vars \
+                ASPNETCORE_ENVIRONMENT=Production \
+                ConnectionStrings__Postgres="${{ secrets.POSTGRES_CONN }}" \
+                SummarizationService__BaseUrl="$SUMMARIZATION_URL"
+          fi
 
-      - name: Deploy Web
+      # 3) Deploy Document Service (external) using SUMMARIZATION_URL
+      - name: Deploy/Update Document Service (external)
         run: |
-          az containerapp create \
-            --name pls-web \
-            --resource-group "$RESOURCE_GROUP" \
-            --environment "$ACA_ENV" \
-            --image "${{ secrets.ACR_LOGIN_SERVER }}/pls-web:${IMAGE_TAG}" \
-            --ingress external \
-            --target-port 5173 \
-            --env-vars \
-              VITE_API_BASE_URL="${{ secrets.API_BASE_URL }}"
+          if az containerapp show -g "$RESOURCE_GROUP" -n pls-document-service >/dev/null 2>&1; then
+            az containerapp update \
+              --name pls-document-service \
+              --resource-group "$RESOURCE_GROUP" \
+              --image "${{ secrets.ACR_LOGIN_SERVER }}/pls-document-service:${IMAGE_TAG}" \
+              --registry-server "${{ secrets.ACR_LOGIN_SERVER }}" \
+              --registry-username "${{ secrets.ACR_USERNAME }}" \
+              --registry-password "${{ secrets.ACR_PASSWORD }}" \
+              --set-env-vars \
+                ASPNETCORE_ENVIRONMENT=Production \
+                ConnectionStrings__Postgres="${{ secrets.POSTGRES_CONN }}" \
+                SummarizationService__BaseUrl="$SUMMARIZATION_URL" \
+                LocalStorage__BasePath=/data/storage
+          else
+            az containerapp create \
+              --name pls-document-service \
+              --resource-group "$RESOURCE_GROUP" \
+              --environment "$ACA_ENV" \
+              --image "${{ secrets.ACR_LOGIN_SERVER }}/pls-document-service:${IMAGE_TAG}" \
+              --registry-server "${{ secrets.ACR_LOGIN_SERVER }}" \
+              --registry-username "${{ secrets.ACR_USERNAME }}" \
+              --registry-password "${{ secrets.ACR_PASSWORD }}" \
+              --ingress external \
+              --target-port 8080 \
+              --env-vars \
+                ASPNETCORE_ENVIRONMENT=Production \
+                ConnectionStrings__Postgres="${{ secrets.POSTGRES_CONN }}" \
+                SummarizationService__BaseUrl="$SUMMARIZATION_URL" \
+                LocalStorage__BasePath=/data/storage
+          fi
+
+      # 4) Deploy Web (external)
+      - name: Deploy/Update Web (external)
+        run: |
+          if az containerapp show -g "$RESOURCE_GROUP" -n pls-web >/dev/null 2>&1; then
+            az containerapp update \
+              --name pls-web \
+              --resource-group "$RESOURCE_GROUP" \
+              --image "${{ secrets.ACR_LOGIN_SERVER }}/pls-web:${IMAGE_TAG}" \
+              --registry-server "${{ secrets.ACR_LOGIN_SERVER }}" \
+              --registry-username "${{ secrets.ACR_USERNAME }}" \
+              --registry-password "${{ secrets.ACR_PASSWORD }}" \
+              --set-env-vars \
+                VITE_API_BASE_URL="${{ secrets.API_BASE_URL }}"
+          else
+            az containerapp create \
+              --name pls-web \
+              --resource-group "$RESOURCE_GROUP" \
+              --environment "$ACA_ENV" \
+              --image "${{ secrets.ACR_LOGIN_SERVER }}/pls-web:${IMAGE_TAG}" \
+              --registry-server "${{ secrets.ACR_LOGIN_SERVER }}" \
+              --registry-username "${{ secrets.ACR_USERNAME }}" \
+              --registry-password "${{ secrets.ACR_PASSWORD }}" \
+              --ingress external \
+              --target-port 5173 \
+              --env-vars \
+                VITE_API_BASE_URL="${{ secrets.API_BASE_URL }}"
+          fi
+
+      - name: Print public URLs
+        run: |
+          echo "pls-web:"
+          az containerapp show -g "$RESOURCE_GROUP" -n pls-web --query properties.configuration.ingress.fqdn -o tsv || true
+          echo "pls-document-service:"
+          az containerapp show -g "$RESOURCE_GROUP" -n pls-document-service --query properties.configuration.ingress.fqdn -o tsv || true
