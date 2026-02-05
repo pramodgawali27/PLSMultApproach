@@ -255,8 +255,9 @@ jobs:
               --name "$APP_NAME" \
               --resource-group "$RESOURCE_GROUP" \
               --image "$IMAGE" \
+              --target-port 80 \
               --set-env-vars \
-                VITE_API_BASE_URL="${{ secrets.API_BASE_URL }}"
+                API_BASE_URL="${{ secrets.API_BASE_URL }}"
           else
             az containerapp create \
               --name "$APP_NAME" \
@@ -267,9 +268,9 @@ jobs:
               --registry-username "${{ secrets.ACR_USERNAME }}" \
               --registry-password "${{ secrets.ACR_PASSWORD }}" \
               --ingress external \
-              --target-port 5173 \
+              --target-port 80 \
               --env-vars \
-                VITE_API_BASE_URL="${{ secrets.API_BASE_URL }}"
+                API_BASE_URL="${{ secrets.API_BASE_URL }}"
           fi
 
       - name: Print public URLs

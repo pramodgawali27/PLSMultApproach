@@ -5,7 +5,7 @@ This file lists environment variables required for production deployments and wh
 ## Frontend (web)
 | Variable | Description | Example |
 |---|---|---|
-| `VITE_API_BASE_URL` | Base URL for API calls | `https://pls-document-service.<region>.azurecontainerapps.io` |
+| `API_BASE_URL` | Runtime API base URL used to generate `/config.json` at container start | `https://pls-document-service.<region>.azurecontainerapps.io` |
 
 Runtime override (no rebuild):
 - `apps/web/public/config.json` with:
