@@ -255,9 +255,13 @@ jobs:
               --name "$APP_NAME" \
               --resource-group "$RESOURCE_GROUP" \
               --image "$IMAGE" \
-              --target-port 80 \
               --set-env-vars \
                 API_BASE_URL="${{ secrets.API_BASE_URL }}"
+
+            az containerapp ingress update \
+              --name "$APP_NAME" \
+              --resource-group "$RESOURCE_GROUP" \
+              --target-port 80
           else
             az containerapp create \
               --name "$APP_NAME" \
