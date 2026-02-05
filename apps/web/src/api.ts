@@ -12,6 +12,13 @@ export type EntitlementsResponse = {
   features?: EntitlementFeature;
 };
 
+export type JobResponse = {
+  jobId: string;
+  status: JobStatus;
+  summaryId?: string;
+  errorMessage?: string | null;
+};
+
 type RuntimeConfig = {
   apiBaseUrl?: string;
 };
@@ -38,7 +45,7 @@ async function getApiBase(): Promise<string> {
   return config.apiBaseUrl ?? import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5072";
 }
 
-function authHeaders() {
+function authHeaders(): HeadersInit {
   const token = localStorage.getItem("pls_token");
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
@@ -123,7 +130,7 @@ export async function generateSummary(documentId: string, lane: SummaryLane) {
   return response.json();
 }
 
-export async function fetchJob(jobId: string) {
+export async function fetchJob(jobId: string): Promise<JobResponse> {
   const apiBase = await getApiBase();
   const response = await fetch(`${apiBase}/api/jobs/${jobId}`, {
     headers: { ...authHeaders() }
@@ -131,7 +138,7 @@ export async function fetchJob(jobId: string) {
   if (!response.ok) {
     throw new Error("Job fetch failed");
   }
-  return response.json();
+  return response.json() as Promise<JobResponse>;
 }
 
 export async function fetchSummaries(params: {

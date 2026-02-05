@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { fetchJob, JobStatus } from "../api";
+import { fetchJob, JobResponse, JobStatus } from "../api";
 
 const terminalStatuses: JobStatus[] = ["Completed", "Failed"];
 
@@ -8,7 +8,8 @@ export function useJobPolling(jobId?: string) {
     queryKey: ["job", jobId],
     queryFn: () => fetchJob(jobId!),
     enabled: Boolean(jobId),
-    refetchInterval: (data) => {
+    refetchInterval: (query) => {
+      const data = query.state.data as JobResponse | undefined;
       if (!data || terminalStatuses.includes(data.status)) return false;
       return 2500;
     }
