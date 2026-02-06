@@ -66,6 +66,13 @@ QuestPDF.Settings.License = LicenseType.Community;
 
 var app = builder.Build();
 
+if (app.Configuration.GetValue<bool>("Database:RunMigrations"))
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<PlsDbContext>();
+    await db.Database.MigrateAsync();
+}
+
 app.UseCorrelationId();
 
 if (app.Environment.IsDevelopment())
