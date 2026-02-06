@@ -172,7 +172,7 @@ jobs:
                 SummarizationService__BaseUrl="$SUMMARIZATION_URL"
           fi
 
-      # 3) Deploy Document Service (external) using SUMMARIZATION_URL
+      # 3) Deploy Document Service (external) using SUMMARIZATION_URL and LocalStorage
       - name: Deploy/Update Document Service (external)
         run: |
           set -e
