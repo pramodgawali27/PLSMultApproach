@@ -34,6 +34,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://0.0.0.0:8080
+      Database__RunMigrations: "true"
       ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=pls;Username=pls;Password=pls
       LocalStorage__BasePath: /data/storage
     ports:

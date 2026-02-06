@@ -204,6 +204,7 @@ jobs:
               --image "$IMAGE" \
               --set-env-vars \
                 ASPNETCORE_ENVIRONMENT=Production \
+                Database__RunMigrations=true \
                 ConnectionStrings__Postgres="${{ secrets.POSTGRES_CONN }}" \
                 SummarizationService__BaseUrl="$SUMMARIZATION_URL" \
                 LocalStorage__BasePath=/data/storage
@@ -220,6 +221,7 @@ jobs:
               --target-port 8080 \
               --env-vars \
                 ASPNETCORE_ENVIRONMENT=Production \
+                Database__RunMigrations=true \
                 ConnectionStrings__Postgres="${{ secrets.POSTGRES_CONN }}" \
                 SummarizationService__BaseUrl="$SUMMARIZATION_URL" \
                 LocalStorage__BasePath=/data/storage
