@@ -89,6 +89,9 @@ jobs:
               --image "$IMAGE" \
               --set-env-vars \
                 ASPNETCORE_ENVIRONMENT=Production \
+                Storage__Provider=Blob \
+                Storage__Blob__ConnectionString="${{ secrets.STORAGE_BLOB_CONNECTION }}" \
+                Storage__Blob__Container="${{ secrets.STORAGE_BLOB_CONTAINER }}" \
                 AZURE_OPENAI_ENDPOINT="${{ secrets.AZURE_OPENAI_ENDPOINT }}" \
                 AZURE_OPENAI_KEY="${{ secrets.AZURE_OPENAI_KEY }}" \
                 AZURE_OPENAI_DEPLOYMENT_PROMPT="${{ secrets.AZURE_OPENAI_DEPLOYMENT_PROMPT }}" \
@@ -108,6 +111,9 @@ jobs:
               --target-port 8080 \
               --env-vars \
                 ASPNETCORE_ENVIRONMENT=Production \
+                Storage__Provider=Blob \
+                Storage__Blob__ConnectionString="${{ secrets.STORAGE_BLOB_CONNECTION }}" \
+                Storage__Blob__Container="${{ secrets.STORAGE_BLOB_CONTAINER }}" \
                 AZURE_OPENAI_ENDPOINT="${{ secrets.AZURE_OPENAI_ENDPOINT }}" \
                 AZURE_OPENAI_KEY="${{ secrets.AZURE_OPENAI_KEY }}" \
                 AZURE_OPENAI_DEPLOYMENT_PROMPT="${{ secrets.AZURE_OPENAI_DEPLOYMENT_PROMPT }}" \
