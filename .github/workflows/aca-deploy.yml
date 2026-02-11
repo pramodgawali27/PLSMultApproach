@@ -207,7 +207,9 @@ jobs:
                 Database__RunMigrations=true \
                 ConnectionStrings__Postgres="${{ secrets.POSTGRES_CONN }}" \
                 SummarizationService__BaseUrl="$SUMMARIZATION_URL" \
-                LocalStorage__BasePath=/data/storage
+                Storage__Provider=Blob \
+                Storage__Blob__ConnectionString="${{ secrets.STORAGE_BLOB_CONNECTION }}" \
+                Storage__Blob__Container="${{ secrets.STORAGE_BLOB_CONTAINER }}"
           else
             az containerapp create \
               --name "$APP_NAME" \
@@ -224,7 +226,9 @@ jobs:
                 Database__RunMigrations=true \
                 ConnectionStrings__Postgres="${{ secrets.POSTGRES_CONN }}" \
                 SummarizationService__BaseUrl="$SUMMARIZATION_URL" \
-                LocalStorage__BasePath=/data/storage
+                Storage__Provider=Blob \
+                Storage__Blob__ConnectionString="${{ secrets.STORAGE_BLOB_CONNECTION }}" \
+                Storage__Blob__Container="${{ secrets.STORAGE_BLOB_CONTAINER }}"
           fi
 
       # 4) Deploy Web (external)

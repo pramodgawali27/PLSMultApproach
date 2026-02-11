@@ -44,6 +44,8 @@ Required secrets:
 - `AZURE_OPENAI_DEPLOYMENT_AGENT`
 - `AZURE_OPENAI_DEPLOYMENT_IMAGE`
 - `API_BASE_URL` (public URL for document-service ingress)
+- `STORAGE_BLOB_CONNECTION` (Azure Blob connection string)
+- `STORAGE_BLOB_CONTAINER` (e.g., `plsfiles`)
 
 Tip: Get ACR credentials:
 ```

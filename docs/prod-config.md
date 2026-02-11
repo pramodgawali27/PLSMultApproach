@@ -18,7 +18,9 @@ Runtime override (no rebuild):
 |---|---|---|
 | `ConnectionStrings__Postgres` | Postgres connection string | `Host=...;Database=pls;Username=pls;Password=...` |
 | `SummarizationService__BaseUrl` | Internal URL for summarization service | `http://pls-summarization-service` |
-| `LocalStorage__BasePath` | Storage path (container) | `/data/storage` |
+| `Storage__Provider` | `Local` or `Blob` | `Blob` |
+| `Storage__Blob__ConnectionString` | Azure Blob connection string | `DefaultEndpointsProtocol=...` |
+| `Storage__Blob__Container` | Blob container name | `plsfiles` |
 
 ## Orchestrator Service
 | Variable | Description | Example |
