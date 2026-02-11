@@ -90,9 +90,220 @@ GET /api/summaries?search=...&lane=...&status=... -> list
 GET /api/entitlements -> lanes allowed for current tenant
 
 LANE IMPLEMENTATION DETAILS
-Lane A Prompt-only:
+Lane A docker logs infra-orchestrator-service-1 --tail 200
 
-- Extract text from document (PDF/DOCX/TXT). Keep it simple: use a text extraction library and fallback to “not supported”.
+warn: Microsoft.AspNetCore.Hosting.Diagnostics[15]
+Overriding HTTP_PORTS '8080' and HTTPS_PORTS ''. Binding to values defined by URLS instead 'http://0.0.0.0:8080'.
+info: Microsoft.Hosting.Lifetime[14]
+Now listening on: http://0.0.0.0:8080
+info: Microsoft.Hosting.Lifetime[0]
+Application started. Press Ctrl+C to shut down.
+info: Microsoft.Hosting.Lifetime[0]
+Hosting environment: Development
+info: Microsoft.Hosting.Lifetime[0]
+Content root path: /app
+FROM "SummaryJobs" AS s
+WHERE s."Status" = 0
+ORDER BY s."RequestedAt"
+LIMIT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT s."Id", s."CompletedAt", s."CorrelationId", s."DocumentId", s."ErrorMessage", s."Lane", s."RequestedAt", s."StartedAt", s."Status", s."TenantId", s."UserId"
+FROM "SummaryJobs" AS s
+WHERE s."Status" = 0
+ORDER BY s."RequestedAt"
+LIMIT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT s."Id", s."CompletedAt", s."CorrelationId", s."DocumentId", s."ErrorMessage", s."Lane", s."RequestedAt", s."StartedAt", s."Status", s."TenantId", s."UserId"
+FROM "SummaryJobs" AS s
+WHERE s."Status" = 0
+ORDER BY s."RequestedAt"
+LIMIT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT s."Id", s."CompletedAt", s."CorrelationId", s."DocumentId", s."ErrorMessage", s."Lane", s."RequestedAt", s."StartedAt", s."Status", s."TenantId", s."UserId"
+FROM "SummaryJobs" AS s
+WHERE s."Status" = 0
+ORDER BY s."RequestedAt"
+LIMIT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT s."Id", s."CompletedAt", s."CorrelationId", s."DocumentId", s."ErrorMessage", s."Lane", s."RequestedAt", s."StartedAt", s."Status", s."TenantId", s."UserId"
+FROM "SummaryJobs" AS s
+WHERE s."Status" = 0
+ORDER BY s."RequestedAt"
+LIMIT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT s."Id", s."CompletedAt", s."CorrelationId", s."DocumentId", s."ErrorMessage", s."Lane", s."RequestedAt", s."StartedAt", s."Status", s."TenantId", s."UserId"
+FROM "SummaryJobs" AS s
+WHERE s."Status" = 0
+ORDER BY s."RequestedAt"
+LIMIT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT s."Id", s."CompletedAt", s."CorrelationId", s."DocumentId", s."ErrorMessage", s."Lane", s."RequestedAt", s."StartedAt", s."Status", s."TenantId", s."UserId"
+FROM "SummaryJobs" AS s
+WHERE s."Status" = 0
+ORDER BY s."RequestedAt"
+LIMIT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT s."Id", s."CompletedAt", s."CorrelationId", s."DocumentId", s."ErrorMessage", s."Lane", s."RequestedAt", s."StartedAt", s."Status", s."TenantId", s."UserId"
+FROM "SummaryJobs" AS s
+WHERE s."Status" = 0
+ORDER BY s."RequestedAt"
+LIMIT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT s."Id", s."CompletedAt", s."CorrelationId", s."DocumentId", s."ErrorMessage", s."Lane", s."RequestedAt", s."StartedAt", s."Status", s."TenantId", s."UserId"
+FROM "SummaryJobs" AS s
+WHERE s."Status" = 0
+ORDER BY s."RequestedAt"
+LIMIT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT s."Id", s."CompletedAt", s."CorrelationId", s."DocumentId", s."ErrorMessage", s."Lane", s."RequestedAt", s."StartedAt", s."Status", s."TenantId", s."UserId"
+FROM "SummaryJobs" AS s
+WHERE s."Status" = 0
+ORDER BY s."RequestedAt"
+LIMIT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT s."Id", s."CompletedAt", s."CorrelationId", s."DocumentId", s."ErrorMessage", s."Lane", s."RequestedAt", s."StartedAt", s."Status", s."TenantId", s."UserId"
+FROM "SummaryJobs" AS s
+WHERE s."Status" = 0
+ORDER BY s."RequestedAt"
+LIMIT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+Executed DbCommand (2ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT s."Id", s."CompletedAt", s."CorrelationId", s."DocumentId", s."ErrorMessage", s."Lane", s."RequestedAt", s."StartedAt", s."Status", s."TenantId", s."UserId"
+FROM "SummaryJobs" AS s
+WHERE s."Status" = 0
+ORDER BY s."RequestedAt"
+LIMIT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT s."Id", s."CompletedAt", s."CorrelationId", s."DocumentId", s."ErrorMessage", s."Lane", s."RequestedAt", s."StartedAt", s."Status", s."TenantId", s."UserId"
+FROM "SummaryJobs" AS s
+WHERE s."Status" = 0
+ORDER BY s."RequestedAt"
+LIMIT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT s."Id", s."CompletedAt", s."CorrelationId", s."DocumentId", s."ErrorMessage", s."Lane", s."RequestedAt", s."StartedAt", s."Status", s."TenantId", s."UserId"
+FROM "SummaryJobs" AS s
+WHERE s."Status" = 0
+ORDER BY s."RequestedAt"
+LIMIT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT s."Id", s."CompletedAt", s."CorrelationId", s."DocumentId", s."ErrorMessage", s."Lane", s."RequestedAt", s."StartedAt", s."Status", s."TenantId", s."UserId"
+FROM "SummaryJobs" AS s
+WHERE s."Status" = 0
+ORDER BY s."RequestedAt"
+LIMIT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT s."Id", s."CompletedAt", s."CorrelationId", s."DocumentId", s."ErrorMessage", s."Lane", s."RequestedAt", s."StartedAt", s."Status", s."TenantId", s."UserId"
+FROM "SummaryJobs" AS s
+WHERE s."Status" = 0
+ORDER BY s."RequestedAt"
+LIMIT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT s."Id", s."CompletedAt", s."CorrelationId", s."DocumentId", s."ErrorMessage", s."Lane", s."RequestedAt", s."StartedAt", s."Status", s."TenantId", s."UserId"
+FROM "SummaryJobs" AS s
+WHERE s."Status" = 0
+ORDER BY s."RequestedAt"
+LIMIT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+Executed DbCommand (2ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT s."Id", s."CompletedAt", s."CorrelationId", s."DocumentId", s."ErrorMessage", s."Lane", s."RequestedAt", s."StartedAt", s."Status", s."TenantId", s."UserId"
+FROM "SummaryJobs" AS s
+WHERE s."Status" = 0
+ORDER BY s."RequestedAt"
+LIMIT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT s."Id", s."CompletedAt", s."CorrelationId", s."DocumentId", s."ErrorMessage", s."Lane", s."RequestedAt", s."StartedAt", s."Status", s."TenantId", s."UserId"
+FROM "SummaryJobs" AS s
+WHERE s."Status" = 0
+ORDER BY s."RequestedAt"
+LIMIT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT s."Id", s."CompletedAt", s."CorrelationId", s."DocumentId", s."ErrorMessage", s."Lane", s."RequestedAt", s."StartedAt", s."Status", s."TenantId", s."UserId"
+FROM "SummaryJobs" AS s
+WHERE s."Status" = 0
+ORDER BY s."RequestedAt"
+LIMIT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT s."Id", s."CompletedAt", s."CorrelationId", s."DocumentId", s."ErrorMessage", s."Lane", s."RequestedAt", s."StartedAt", s."Status", s."TenantId", s."UserId"
+FROM "SummaryJobs" AS s
+WHERE s."Status" = 0
+ORDER BY s."RequestedAt"
+LIMIT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT s."Id", s."CompletedAt", s."CorrelationId", s."DocumentId", s."ErrorMessage", s."Lane", s."RequestedAt", s."StartedAt", s."Status", s."TenantId", s."UserId"
+FROM "SummaryJobs" AS s
+WHERE s."Status" = 0
+ORDER BY s."RequestedAt"
+LIMIT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+Executed DbCommand (0ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT s."Id", s."CompletedAt", s."CorrelationId", s."DocumentId", s."ErrorMessage", s."Lane", s."RequestedAt", s."StartedAt", s."Status", s."TenantId", s."UserId"
+FROM "SummaryJobs" AS s
+WHERE s."Status" = 0
+ORDER BY s."RequestedAt"
+LIMIT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT s."Id", s."CompletedAt", s."CorrelationId", s."DocumentId", s."ErrorMessage", s."Lane", s."RequestedAt", s."StartedAt", s."Status", s."TenantId", s."UserId"
+FROM "SummaryJobs" AS s
+WHERE s."Status" = 0
+ORDER BY s."RequestedAt"
+LIMIT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT s."Id", s."CompletedAt", s."CorrelationId", s."DocumentId", s."ErrorMessage", s."Lane", s."RequestedAt", s."StartedAt", s."Status", s."TenantId", s."UserId"
+FROM "SummaryJobs" AS s
+WHERE s."Status" = 0
+ORDER BY s."RequestedAt"
+LIMIT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT s."Id", s."CompletedAt", s."CorrelationId", s."DocumentId", s."ErrorMessage", s."Lane", s."RequestedAt", s."StartedAt", s."Status", s."TenantId", s."UserId"
+FROM "SummaryJobs" AS s
+WHERE s."Status" = 0
+ORDER BY s."RequestedAt"
+LIMIT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT s."Id", s."CompletedAt", s."CorrelationId", s."DocumentId", s."ErrorMessage", s."Lane", s."RequestedAt", s."StartedAt", s."Status", s."TenantId", s."UserId"
+FROM "SummaryJobs" AS s
+WHERE s."Status" = 0
+ORDER BY s."RequestedAt"
+LIMIT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT s."Id", s."CompletedAt", s."CorrelationId", s."DocumentId", s."ErrorMessage", s."Lane", s."RequestedAt", s."StartedAt", s."Status", s."TenantId", s."UserId"
+FROM "SummaryJobs" AS s
+WHERE s."Status" = 0
+ORDER BY s."RequestedAt"
+LIMIT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT s."Id", s."CompletedAt", s."CorrelationId", s."DocumentId", s."ErrorMessage", s."Lane", s."RequestedAt", s."StartedAt", s."Status", s."TenantId", s."UserId"
+FROM "SummaryJobs" AS s
+WHERE s."Status" = 0
+ORDER BY s."RequestedAt"
+LIMIT 1-only:
+
+- Extract text from document h (PDF/DOCX/TXT). Keep it simple: use a text extraction library and fallback to “not supported”.
 - Call an LLM provider through an interface ILLMClient. For now, stub with a fake provider for local run.
 - Use a strong system prompt for plain-language medical summaries: explain jargon, short sentences, disclaimers.
 
