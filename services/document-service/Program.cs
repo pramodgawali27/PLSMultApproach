@@ -25,7 +25,10 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("dev", policy =>
     {
-        policy.WithOrigins("http://localhost:5173", "http://web")
+        policy.WithOrigins(
+                "http://localhost:5173",
+                "http://web",
+                "https://pls-web.happydune-0689c206.eastus.azurecontainerapps.io")
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
