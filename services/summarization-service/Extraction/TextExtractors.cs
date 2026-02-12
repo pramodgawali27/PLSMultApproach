@@ -3,6 +3,7 @@ using System.Text;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 using PLS.BuildingBlocks.Results;
+using SummarizationService.Storage;
 using UglyToad.PdfPig;
 
 namespace SummarizationService.Extraction;
@@ -70,16 +71,22 @@ public sealed class DoclingTextExtractor : ITextExtractor
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
+    private readonly IStorageReader _storageReader;
 
-    public DoclingTextExtractor(IHttpClientFactory httpClientFactory, IConfiguration configuration)
+    public DoclingTextExtractor(
+        IHttpClientFactory httpClientFactory,
+        IConfiguration configuration,
+        IStorageReader storageReader)
     {
         _httpClientFactory = httpClientFactory;
         _configuration = configuration;
+        _storageReader = storageReader;
     }
 
     public async Task<Result<ExtractionResult>> ExtractAsync(Guid documentId, string storageUri, string contentType)
     {
-        if (!File.Exists(storageUri))
+        var localPath = await _storageReader.GetLocalPathAsync(storageUri, documentId, CancellationToken.None);
+        if (!File.Exists(localPath))
         {
             return Result<ExtractionResult>.Fail("File not found in storage.");
         }
@@ -91,10 +98,10 @@ public sealed class DoclingTextExtractor : ITextExtractor
         }
 
         using var content = new MultipartFormDataContent();
-        await using var stream = File.OpenRead(storageUri);
+        await using var stream = File.OpenRead(localPath);
         var fileContent = new StreamContent(stream);
         fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
-        content.Add(fileContent, "file", Path.GetFileName(storageUri));
+        content.Add(fileContent, "file", Path.GetFileName(localPath));
 
         var client = _httpClientFactory.CreateClient("docling");
         client.BaseAddress = new Uri(baseUrl);
@@ -129,22 +136,30 @@ public sealed class DoclingTextExtractor : ITextExtractor
 
 public sealed class CompositeTextExtractor : ITextExtractor
 {
+    private readonly IStorageReader _storageReader;
+
+    public CompositeTextExtractor(IStorageReader storageReader)
+    {
+        _storageReader = storageReader;
+    }
+
     public async Task<Result<ExtractionResult>> ExtractAsync(Guid documentId, string storageUri, string contentType)
     {
-        if (!File.Exists(storageUri))
+        var localPath = await _storageReader.GetLocalPathAsync(storageUri, documentId, CancellationToken.None);
+        if (!File.Exists(localPath))
         {
             return Result<ExtractionResult>.Fail("File not found in storage.");
         }
 
         if (contentType.Contains("text", StringComparison.OrdinalIgnoreCase))
         {
-            var text = await File.ReadAllTextAsync(storageUri);
+            var text = await File.ReadAllTextAsync(localPath);
             return Result<ExtractionResult>.Ok(new ExtractionResult(text, Array.Empty<ExtractedImage>(), "local"));
         }
 
         if (contentType.Contains("pdf", StringComparison.OrdinalIgnoreCase))
         {
-            using var document = PdfDocument.Open(storageUri);
+            using var document = PdfDocument.Open(localPath);
             var text = new StringBuilder();
             foreach (var page in document.GetPages())
             {
@@ -155,7 +170,7 @@ public sealed class CompositeTextExtractor : ITextExtractor
 
         if (contentType.Contains("word", StringComparison.OrdinalIgnoreCase) || storageUri.EndsWith(".docx", StringComparison.OrdinalIgnoreCase))
         {
-            using var doc = WordprocessingDocument.Open(storageUri, false);
+            using var doc = WordprocessingDocument.Open(localPath, false);
             var body = doc.MainDocumentPart?.Document?.Body;
             var text = body?.Descendants<Text>().Select(t => t.Text) ?? Enumerable.Empty<string>();
             return Result<ExtractionResult>.Ok(new ExtractionResult(string.Join(" ", text), Array.Empty<ExtractedImage>(), "local"));

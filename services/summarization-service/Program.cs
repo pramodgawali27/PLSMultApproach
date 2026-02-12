@@ -7,6 +7,7 @@ using SummarizationService.Llm;
 using SummarizationService.Extraction;
 using SummarizationService.Images;
 using SummarizationService.Prompting;
+using SummarizationService.Storage;
 using Azure.Identity;
 using Microsoft.SemanticKernel;
 
@@ -15,6 +16,15 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddHttpClient("docling");
 builder.Services.AddHttpClient("azureopenai");
 builder.Services.AddHttpClient("ollama");
+var storageProvider = builder.Configuration["Storage:Provider"] ?? "Local";
+if (storageProvider.Equals("Blob", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddSingleton<IStorageReader, AzureBlobStorageReader>();
+}
+else
+{
+    builder.Services.AddSingleton<IStorageReader, LocalStorageReader>();
+}
 builder.Services.AddSingleton<CompositeTextExtractor>();
 builder.Services.AddSingleton<DoclingTextExtractor>();
 builder.Services.AddSingleton<ITextExtractor, HybridTextExtractor>();

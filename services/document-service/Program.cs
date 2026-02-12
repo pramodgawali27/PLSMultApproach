@@ -13,6 +13,7 @@ using PLS.BuildingBlocks.Correlation;
 using PLS.BuildingBlocks.Data;
 using PLS.BuildingBlocks.Entitlements;
 using PLS.Contracts;
+using Azure.Storage.Blobs;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -58,7 +59,15 @@ builder.Services.AddDbContext<PlsDbContext>(options =>
     options.UseNpgsql(connectionString, o => o.MigrationsAssembly("DocumentService"));
 });
 
-builder.Services.AddSingleton<IFileStorage, LocalFileStorage>();
+var storageProvider = builder.Configuration["Storage:Provider"] ?? "Local";
+if (storageProvider.Equals("Blob", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddSingleton<IFileStorage, AzureBlobFileStorage>();
+}
+else
+{
+    builder.Services.AddSingleton<IFileStorage, LocalFileStorage>();
+}
 builder.Services.AddSingleton<IMalwareScanner, NoopMalwareScanner>();
 builder.Services.AddSingleton<IEventPublisher, NoopEventPublisher>();
 builder.Services.AddSingleton<SummaryExportService>();
@@ -82,10 +91,11 @@ if (app.Environment.IsDevelopment())
 {
     // OpenAPI is optional in this starter.
 }
+app.UseCors("dev");
 
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseCors("dev");
+
 
 app.MapPost("/api/auth/dev-login", async (DevLoginRequest request, PlsDbContext db) =>
 {
@@ -495,6 +505,33 @@ sealed class LocalFileStorage : IFileStorage
         await file.CopyToAsync(stream);
 
         return filePath;
+    }
+}
+
+sealed class AzureBlobFileStorage : IFileStorage
+{
+    private readonly BlobContainerClient _container;
+
+    public AzureBlobFileStorage(IConfiguration configuration)
+    {
+        var connectionString = configuration["Storage:Blob:ConnectionString"];
+        var containerName = configuration["Storage:Blob:Container"];
+        if (string.IsNullOrWhiteSpace(connectionString) || string.IsNullOrWhiteSpace(containerName))
+        {
+            throw new InvalidOperationException("Storage:Blob:ConnectionString and Storage:Blob:Container are required.");
+        }
+
+        _container = new BlobContainerClient(connectionString, containerName);
+        _container.CreateIfNotExists();
+    }
+
+    public async Task<string> SaveAsync(Guid tenantId, Guid documentId, IFormFile file)
+    {
+        var blobName = $"{tenantId}/{documentId}";
+        var blob = _container.GetBlobClient(blobName);
+        await using var stream = file.OpenReadStream();
+        await blob.UploadAsync(stream, overwrite: true);
+        return blob.Uri.ToString();
     }
 }
 

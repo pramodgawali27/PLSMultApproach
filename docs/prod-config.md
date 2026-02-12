@@ -37,6 +37,9 @@ Runtime override (no rebuild):
 | `AZURE_OPENAI_DEPLOYMENT_FINETUNE` | Fine-tuned deployment name | `pls-finetune` |
 | `AZURE_OPENAI_DEPLOYMENT_AGENT` | Agent deployment name | `pls-agent` |
 | `AZURE_OPENAI_DEPLOYMENT_IMAGE` | Image deployment name | `pls-image` |
+| `Storage__Provider` | `Local` or `Blob` | `Blob` |
+| `Storage__Blob__ConnectionString` | Azure Blob connection string | `DefaultEndpointsProtocol=...` |
+| `Storage__Blob__Container` | Blob container name | `plsfiles` |
 
 ## Optional: Ollama
 | Variable | Description | Example |
