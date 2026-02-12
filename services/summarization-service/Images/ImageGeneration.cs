@@ -33,6 +33,7 @@ public sealed class AzureOpenAiImageGenerator : IImageGenerator
     {
         var endpoint = _configuration["AZURE_OPENAI_ENDPOINT"];
         var deployment = _configuration["AZURE_OPENAI_DEPLOYMENT_IMAGE"];
+        //Image generation
         if (string.IsNullOrWhiteSpace(endpoint) || string.IsNullOrWhiteSpace(deployment))
         {
             _logger.LogWarning("Image generation skipped: AZURE_OPENAI_ENDPOINT or AZURE_OPENAI_DEPLOYMENT_IMAGE missing.");
