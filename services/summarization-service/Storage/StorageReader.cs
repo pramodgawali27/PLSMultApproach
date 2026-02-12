@@ -17,6 +17,7 @@ public sealed class AzureBlobStorageReader : IStorageReader
 {
     private readonly BlobContainerClient _container;
     private readonly string _basePath;
+    private readonly string _containerName;
 
     public AzureBlobStorageReader(IConfiguration configuration)
     {
@@ -29,11 +30,12 @@ public sealed class AzureBlobStorageReader : IStorageReader
 
         _container = new BlobContainerClient(connectionString, containerName);
         _basePath = Path.Combine(Path.GetTempPath(), "pls", "blob-cache");
+        _containerName = containerName;
     }
 
     public async Task<string> GetLocalPathAsync(string storageUri, Guid documentId, CancellationToken cancellationToken)
     {
-        var blobName = ResolveBlobName(storageUri);
+        var blobName = ResolveBlobName(storageUri, _containerName);
         var blob = _container.GetBlobClient(blobName);
         var filePath = Path.Combine(_basePath, documentId.ToString());
         Directory.CreateDirectory(Path.GetDirectoryName(filePath) ?? _basePath);
@@ -43,11 +45,23 @@ public sealed class AzureBlobStorageReader : IStorageReader
         return filePath;
     }
 
-    private static string ResolveBlobName(string storageUri)
+    private static string ResolveBlobName(string storageUri, string containerName)
     {
         if (Uri.TryCreate(storageUri, UriKind.Absolute, out var uri))
         {
-            return uri.AbsolutePath.TrimStart('/');
+            var path = uri.AbsolutePath.TrimStart('/');
+            var parts = path.Split('/', 2, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            if (parts[0].Equals(containerName, StringComparison.OrdinalIgnoreCase))
+            {
+                return parts.Length > 1 ? parts[1] : string.Empty;
+            }
+
+            return path;
         }
 
         return storageUri.TrimStart('/');
