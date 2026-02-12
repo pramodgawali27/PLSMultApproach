@@ -125,6 +125,7 @@ public sealed class ImagePromptParser
 
         summary = Regex.Replace(summary, @"^.*BLOCK A.*$", string.Empty, RegexOptions.Multiline);
         summary = Regex.Replace(summary, @"^\s*\[\[FIGURE:.*?\]\]\s*$", string.Empty, RegexOptions.Multiline);
+        summary = Regex.Replace(summary, @"^```[a-zA-Z]*\s*$", string.Empty, RegexOptions.Multiline);
         summary = summary.Trim();
 
         var jsonMatch = Regex.Match(jsonBlock, @"\[[\s\S]*\]");
