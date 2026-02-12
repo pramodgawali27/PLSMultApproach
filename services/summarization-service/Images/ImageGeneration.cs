@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using Azure.Core;
 using Azure.Identity;
 using Azure.Storage.Blobs;
+using Azure.Storage.Sas;
 using SummarizationService.Storage;
 
 namespace SummarizationService.Images;
@@ -278,7 +279,22 @@ public static class ImageGenerationPipeline
         var sasToken = configuration["Storage:Blob:SasToken"];
         if (string.IsNullOrWhiteSpace(sasToken))
         {
-            return blob.Uri.ToString();
+            var generateSas = configuration.GetValue("Storage:Blob:GenerateSas", true);
+            if (!generateSas || !blob.CanGenerateSasUri)
+            {
+                return blob.Uri.ToString();
+            }
+
+            var expiresInMinutes = configuration.GetValue("Storage:Blob:SasExpiryMinutes", 120);
+            var sasBuilder = new BlobSasBuilder
+            {
+                BlobContainerName = blob.BlobContainerName,
+                BlobName = blob.Name,
+                Resource = "b",
+                ExpiresOn = DateTimeOffset.UtcNow.AddMinutes(expiresInMinutes)
+            };
+            sasBuilder.SetPermissions(BlobSasPermissions.Read);
+            return blob.GenerateSasUri(sasBuilder).ToString();
         }
 
         return sasToken.StartsWith("?", StringComparison.Ordinal)
