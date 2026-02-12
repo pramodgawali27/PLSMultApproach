@@ -35,7 +35,7 @@ public sealed class AzureBlobStorageReader : IStorageReader
 
     public async Task<string> GetLocalPathAsync(string storageUri, Guid documentId, CancellationToken cancellationToken)
     {
-        var blobName = ResolveBlobName(storageUri, _containerName);
+        var blobName = StoragePathHelper.ResolveBlobName(storageUri, _containerName);
         var blob = _container.GetBlobClient(blobName);
         var filePath = Path.Combine(_basePath, documentId.ToString());
         Directory.CreateDirectory(Path.GetDirectoryName(filePath) ?? _basePath);
@@ -45,7 +45,11 @@ public sealed class AzureBlobStorageReader : IStorageReader
         return filePath;
     }
 
-    private static string ResolveBlobName(string storageUri, string containerName)
+}
+
+public static class StoragePathHelper
+{
+    public static string ResolveBlobName(string storageUri, string containerName)
     {
         if (Uri.TryCreate(storageUri, UriKind.Absolute, out var uri))
         {
@@ -65,5 +69,16 @@ public sealed class AzureBlobStorageReader : IStorageReader
         }
 
         return storageUri.TrimStart('/');
+    }
+
+    public static string GetBlobDirectory(string blobName)
+    {
+        if (string.IsNullOrWhiteSpace(blobName))
+        {
+            return string.Empty;
+        }
+
+        var idx = blobName.LastIndexOf('/');
+        return idx > 0 ? blobName.Substring(0, idx) : blobName;
     }
 }

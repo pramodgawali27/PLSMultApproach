@@ -5,6 +5,8 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Azure.Core;
 using Azure.Identity;
+using Azure.Storage.Blobs;
+using SummarizationService.Storage;
 
 namespace SummarizationService.Images;
 
@@ -40,12 +42,17 @@ public sealed class AzureOpenAiImageGenerator : IImageGenerator
             return null;
         }
 
-        var apiVersion = _configuration["AZURE_OPENAI_API_VERSION"] ?? "2024-02-01";
-        var requestUri = $"{endpoint.TrimEnd('/')}/openai/deployments/{deployment}/images/generations?api-version={apiVersion}";
+        var baseEndpoint = endpoint.TrimEnd('/');
+        if (!baseEndpoint.EndsWith("/openai/v1", StringComparison.OrdinalIgnoreCase))
+        {
+            baseEndpoint = $"{baseEndpoint}/openai/v1";
+        }
+        var requestUri = $"{baseEndpoint}/images/generations";
 
         var body = new
         {
             prompt = prompt.Prompt,
+            model = deployment,
             n = 1,
             size = "1024x1024",
             response_format = "b64_json"
@@ -176,13 +183,22 @@ public static class ImageGenerationPipeline
             return Array.Empty<GeneratedImageFile>();
         }
 
-        var directory = Path.GetDirectoryName(storageUri);
+        var storageProvider = configuration["Storage:Provider"] ?? "Local";
+        var useBlob = storageProvider.Equals("Blob", StringComparison.OrdinalIgnoreCase);
+        var containerName = configuration["Storage:Blob:Container"];
+        var connectionString = configuration["Storage:Blob:ConnectionString"];
+        var directory = useBlob
+            ? StoragePathHelper.GetBlobDirectory(StoragePathHelper.ResolveBlobName(storageUri, containerName ?? string.Empty))
+            : Path.GetDirectoryName(storageUri);
         if (string.IsNullOrWhiteSpace(directory))
         {
             return Array.Empty<GeneratedImageFile>();
         }
 
         var results = new List<GeneratedImageFile>();
+        var container = useBlob && !string.IsNullOrWhiteSpace(connectionString) && !string.IsNullOrWhiteSpace(containerName)
+            ? new BlobContainerClient(connectionString, containerName)
+            : null;
         foreach (var prompt in prompts.Take(MaxImages))
         {
             var generated = await generator.GenerateAsync(prompt, cancellationToken);
@@ -200,8 +216,19 @@ public static class ImageGenerationPipeline
             var safeId = string.IsNullOrWhiteSpace(generated.FigureId)
                 ? Guid.NewGuid().ToString("n")
                 : SanitizeId(generated.FigureId);
-            var filePath = Path.Combine(directory, $"{documentId}-ai-{safeId}.png");
-            await File.WriteAllBytesAsync(filePath, generated.Content, cancellationToken);
+            string filePath;
+            if (useBlob && container is not null)
+            {
+                var blobName = $"{directory}/{documentId}-ai-{safeId}.png";
+                var blob = container.GetBlobClient(blobName);
+                await blob.UploadAsync(new BinaryData(generated.Content), overwrite: true, cancellationToken);
+                filePath = blob.Uri.ToString();
+            }
+            else
+            {
+                filePath = Path.Combine(directory, $"{documentId}-ai-{safeId}.png");
+                await File.WriteAllBytesAsync(filePath, generated.Content, cancellationToken);
+            }
 
             results.Add(new GeneratedImageFile(filePath, generated.ContentType, generated.Caption));
         }

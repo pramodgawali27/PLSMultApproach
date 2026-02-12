@@ -100,7 +100,7 @@ app.MapPost("/internal/summarize", async (
         return Results.BadRequest(extraction.Error ?? "Failed to extract text.");
     }
 
-    var savedImages = ImagePersistence.Save(extraction.Value.Images, request.DocumentId, request.StorageUri);
+    var savedImages = ImagePersistence.Save(extraction.Value.Images, request.DocumentId, request.StorageUri, configuration);
 
     var provider = configuration["LLM_PROVIDER"] ?? "azure";
     var guardrailResult = guardrails.Evaluate(request.Lane, extraction.Value.Text);
@@ -186,26 +186,48 @@ static class ImagePersistence
     public static IReadOnlyList<SavedImage> Save(
         IReadOnlyList<ExtractedImage> images,
         Guid documentId,
-        string storageUri)
+        string storageUri,
+        IConfiguration configuration)
     {
         if (images.Count == 0)
         {
             return Array.Empty<SavedImage>();
         }
 
-        var directory = Path.GetDirectoryName(storageUri);
+        var storageProvider = configuration["Storage:Provider"] ?? "Local";
+        var useBlob = storageProvider.Equals("Blob", StringComparison.OrdinalIgnoreCase);
+        var containerName = configuration["Storage:Blob:Container"];
+        var connectionString = configuration["Storage:Blob:ConnectionString"];
+        var directory = useBlob
+            ? SummarizationService.Storage.StoragePathHelper.GetBlobDirectory(
+                SummarizationService.Storage.StoragePathHelper.ResolveBlobName(storageUri, containerName ?? string.Empty))
+            : Path.GetDirectoryName(storageUri);
         if (string.IsNullOrWhiteSpace(directory))
         {
             return Array.Empty<SavedImage>();
         }
 
+        var container = useBlob && !string.IsNullOrWhiteSpace(connectionString) && !string.IsNullOrWhiteSpace(containerName)
+            ? new Azure.Storage.Blobs.BlobContainerClient(connectionString, containerName)
+            : null;
         var saved = new List<SavedImage>();
         for (var i = 0; i < images.Count; i++)
         {
             var image = images[i];
             var extension = ExtensionFromContentType(image.ContentType);
-            var filePath = Path.Combine(directory, $"{documentId}-image-{i + 1}{extension}");
-            File.WriteAllBytes(filePath, image.Content);
+            string filePath;
+            if (useBlob && container is not null)
+            {
+                var blobName = $"{directory}/{documentId}-image-{i + 1}{extension}";
+                var blob = container.GetBlobClient(blobName);
+                blob.Upload(new BinaryData(image.Content), overwrite: true);
+                filePath = blob.Uri.ToString();
+            }
+            else
+            {
+                filePath = Path.Combine(directory, $"{documentId}-image-{i + 1}{extension}");
+                File.WriteAllBytes(filePath, image.Content);
+            }
             saved.Add(new SavedImage(filePath, image.ContentType, image.Caption));
         }
 
