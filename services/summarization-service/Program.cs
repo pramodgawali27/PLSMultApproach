@@ -105,6 +105,7 @@ app.MapPost("/internal/summarize", async (
 
     var summaryWithPlaceholders = SummaryPostProcessor.EnsureFigurePlaceholders(parsed.SummaryText, parsed.ImagePrompts);
     var enrichedSummary = SummaryPostProcessor.ReplaceFigurePlaceholders(summaryWithPlaceholders, generatedImages);
+    enrichedSummary = SummaryPostProcessor.NormalizeImageMarkdown(enrichedSummary);
 
     var modelInfo = new
     {
@@ -235,6 +236,25 @@ static class SummaryPostProcessor
         }
 
         return $"{summary}\n\n{placeholder}";
+    }
+
+    public static string NormalizeImageMarkdown(string summary)
+    {
+        if (string.IsNullOrWhiteSpace(summary))
+        {
+            return summary;
+        }
+
+        // Collapse newlines inside markdown image URLs: ![alt](url)
+        return System.Text.RegularExpressions.Regex.Replace(
+            summary,
+            @"!\[(?<alt>[^\]]*)\]\((?<url>[\s\S]*?)\)",
+            match =>
+            {
+                var alt = match.Groups["alt"].Value;
+                var url = match.Groups["url"].Value.Replace("\r", string.Empty).Replace("\n", string.Empty).Trim();
+                return $"![{alt}]({url})";
+            });
     }
 }
 
