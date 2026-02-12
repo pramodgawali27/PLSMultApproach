@@ -184,9 +184,13 @@ public static class ImageGenerationPipeline
         }
 
         var storageProvider = configuration["Storage:Provider"] ?? "Local";
-        var useBlob = storageProvider.Equals("Blob", StringComparison.OrdinalIgnoreCase);
         var containerName = configuration["Storage:Blob:Container"];
         var connectionString = configuration["Storage:Blob:ConnectionString"];
+        var useBlob = storageProvider.Equals("Blob", StringComparison.OrdinalIgnoreCase);
+        if (!useBlob && LooksLikeBlobUrl(storageUri) && !string.IsNullOrWhiteSpace(connectionString) && !string.IsNullOrWhiteSpace(containerName))
+        {
+            useBlob = true;
+        }
         var directory = useBlob
             ? StoragePathHelper.GetBlobDirectory(StoragePathHelper.ResolveBlobName(storageUri, containerName ?? string.Empty))
             : Path.GetDirectoryName(storageUri);
@@ -222,7 +226,7 @@ public static class ImageGenerationPipeline
                 var blobName = $"{directory}/{documentId}-ai-{safeId}.png";
                 var blob = container.GetBlobClient(blobName);
                 await blob.UploadAsync(new BinaryData(generated.Content), overwrite: true, cancellationToken);
-                filePath = blob.Uri.ToString();
+                filePath = BuildBlobUrl(blob, configuration);
             }
             else
             {
@@ -257,6 +261,29 @@ public static class ImageGenerationPipeline
         }
         var caption = string.IsNullOrWhiteSpace(prompt.Title) ? "Placeholder illustration" : prompt.Title;
         return new GeneratedImage(content, "image/png", caption, prompt.FigureId);
+    }
+
+    private static bool LooksLikeBlobUrl(string storageUri)
+    {
+        if (!Uri.TryCreate(storageUri, UriKind.Absolute, out var uri))
+        {
+            return false;
+        }
+
+        return uri.Host.Contains("blob.core.windows.net", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string BuildBlobUrl(BlobClient blob, IConfiguration configuration)
+    {
+        var sasToken = configuration["Storage:Blob:SasToken"];
+        if (string.IsNullOrWhiteSpace(sasToken))
+        {
+            return blob.Uri.ToString();
+        }
+
+        return sasToken.StartsWith("?", StringComparison.Ordinal)
+            ? $"{blob.Uri}{sasToken}"
+            : $"{blob.Uri}?{sasToken}";
     }
 }
 

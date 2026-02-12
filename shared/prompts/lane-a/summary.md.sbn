@@ -115,6 +115,9 @@ One short paragraph.
 
 Insert `[[FIGURE:<figure_id>]]` placeholders exactly where figures should appear (on their own line).
 Only insert placeholders that you will define in BLOCK B.
+If you include any figure in BLOCK B, you MUST include its matching `[[FIGURE:<figure_id>]]` placeholder
+in BLOCK A under the specified placement heading. If the exact heading is not present, add the placeholder
+at the end of the closest relevant section.
 
 ---
 
@@ -147,6 +150,17 @@ Document:
 ---
 
 ## Now produce the output contract:
-1) BLOCK A: PLS_MARKDOWN
-2) BLOCK B: IMAGE_PROMPTS_JSON
 
+Return exactly the following structure, with the labels and code fences shown:
+
+BLOCK A: PLS_MARKDOWN
+```markdown
+<PLS content here>
+```
+
+BLOCK B: IMAGE_PROMPTS_JSON
+```json
+<JSON array here>
+```
+
+Do not add any extra text before, between, or after these blocks.

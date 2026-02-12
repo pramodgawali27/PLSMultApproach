@@ -8,8 +8,6 @@ using SummarizationService.Extraction;
 using SummarizationService.Images;
 using SummarizationService.Prompting;
 using SummarizationService.Storage;
-using Azure.Identity;
-using Microsoft.SemanticKernel;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -37,35 +35,7 @@ if (llmProvider.Equals("ollama", StringComparison.OrdinalIgnoreCase))
 }
 else
 {
-    builder.Services.AddSingleton(sp =>
-    {
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var endpoint = configuration["AZURE_OPENAI_ENDPOINT"] ?? string.Empty;
-        var deployment = configuration["AZURE_OPENAI_DEPLOYMENT_PROMPT"] ?? string.Empty;
-        var apiKey = configuration["AZURE_OPENAI_KEY"];
-
-        if (string.IsNullOrWhiteSpace(endpoint) || string.IsNullOrWhiteSpace(deployment))
-        {
-            throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_DEPLOYMENT_PROMPT are required.");
-        }
-
-        var builder = Kernel.CreateBuilder();
-        if (!string.IsNullOrWhiteSpace(apiKey))
-        {
-            builder.AddAzureOpenAIChatCompletion(deployment, endpoint, apiKey);
-        }
-        else
-        {
-            var clientId = configuration["AZURE_CLIENT_ID"];
-            var credential = string.IsNullOrWhiteSpace(clientId)
-                ? new DefaultAzureCredential()
-                : new DefaultAzureCredential(new DefaultAzureCredentialOptions { ManagedIdentityClientId = clientId });
-            builder.AddAzureOpenAIChatCompletion(deployment, endpoint, credential);
-        }
-
-        return builder.Build();
-    });
-    builder.Services.AddSingleton<ILLMClient, SemanticKernelLlmClient>();
+    builder.Services.AddSingleton<ILLMClient, AzureOpenAiV1ChatClient>();
 }
 builder.Services.AddSingleton(GuardrailPolicyLoader.Load(builder.Configuration));
 builder.Services.AddSingleton<GuardrailEvaluator>();
@@ -133,7 +103,8 @@ app.MapPost("/internal/summarize", async (
         configuration,
         cancellationToken);
 
-    var enrichedSummary = SummaryPostProcessor.ReplaceFigurePlaceholders(parsed.SummaryText, generatedImages);
+    var summaryWithPlaceholders = SummaryPostProcessor.EnsureFigurePlaceholders(parsed.SummaryText, parsed.ImagePrompts);
+    var enrichedSummary = SummaryPostProcessor.ReplaceFigurePlaceholders(summaryWithPlaceholders, generatedImages);
 
     var modelInfo = new
     {
@@ -186,6 +157,41 @@ sealed record SummarizeResponse(string SummaryText, string? ModelInfoJson);
 
 static class SummaryPostProcessor
 {
+    public static string EnsureFigurePlaceholders(string summary, IReadOnlyList<ImagePrompt> prompts)
+    {
+        if (string.IsNullOrWhiteSpace(summary) || prompts.Count == 0)
+        {
+            return summary;
+        }
+
+        var output = summary;
+        foreach (var prompt in prompts)
+        {
+            if (string.IsNullOrWhiteSpace(prompt.FigureId))
+            {
+                continue;
+            }
+
+            var placeholder = $"[[FIGURE:{prompt.FigureId}]]";
+            if (output.Contains(placeholder, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var heading = prompt.Placement?.Trim();
+            if (!string.IsNullOrWhiteSpace(heading))
+            {
+                output = InsertPlaceholderAfterHeading(output, heading, placeholder);
+            }
+            else
+            {
+                output = $"{output}\n\n{placeholder}";
+            }
+        }
+
+        return output;
+    }
+
     public static string ReplaceFigurePlaceholders(string summary, IReadOnlyList<GeneratedImageFile> images)
     {
         if (string.IsNullOrWhiteSpace(summary) || images.Count == 0)
@@ -208,6 +214,27 @@ static class SummaryPostProcessor
         }
 
         return output;
+    }
+
+    private static string InsertPlaceholderAfterHeading(string summary, string headingText, string placeholder)
+    {
+        var lines = summary.Split('\n').ToList();
+        for (var i = 0; i < lines.Count; i++)
+        {
+            var line = lines[i].Trim();
+            if (line.StartsWith("## ", StringComparison.OrdinalIgnoreCase)
+                || line.StartsWith("### ", StringComparison.OrdinalIgnoreCase))
+            {
+                var lineHeading = line.TrimStart('#', ' ').Trim();
+                if (lineHeading.Equals(headingText, StringComparison.OrdinalIgnoreCase))
+                {
+                    lines.Insert(i + 1, placeholder);
+                    return string.Join('\n', lines);
+                }
+            }
+        }
+
+        return $"{summary}\n\n{placeholder}";
     }
 }
 
