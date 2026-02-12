@@ -91,7 +91,7 @@ app.MapPost("/internal/summarize", async (
 {
     if (request.Lane != SummaryLane.LaneA)
     {
-        return Results.BadRequest("Lane not implemented yet.");
+        return Results.BadRequest("Lane not yet implemented.");
     }
 
     var extraction = await extractor.ExtractAsync(request.DocumentId, request.StorageUri, request.ContentType);
