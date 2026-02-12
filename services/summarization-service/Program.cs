@@ -133,7 +133,7 @@ app.MapPost("/internal/summarize", async (
         configuration,
         cancellationToken);
 
-    var enrichedSummary = ReplaceFigurePlaceholders(parsed.SummaryText, generatedImages);
+    var enrichedSummary = SummaryPostProcessor.ReplaceFigurePlaceholders(parsed.SummaryText, generatedImages);
 
     var modelInfo = new
     {
@@ -184,28 +184,31 @@ sealed record SummarizeRequest(Guid DocumentId, SummaryLane Lane, string Storage
 
 sealed record SummarizeResponse(string SummaryText, string? ModelInfoJson);
 
-static string ReplaceFigurePlaceholders(string summary, IReadOnlyList<GeneratedImageFile> images)
+static class SummaryPostProcessor
 {
-    if (string.IsNullOrWhiteSpace(summary) || images.Count == 0)
+    public static string ReplaceFigurePlaceholders(string summary, IReadOnlyList<GeneratedImageFile> images)
     {
-        return summary;
-    }
-
-    var output = summary;
-    foreach (var image in images)
-    {
-        if (string.IsNullOrWhiteSpace(image.FigureId))
+        if (string.IsNullOrWhiteSpace(summary) || images.Count == 0)
         {
-            continue;
+            return summary;
         }
 
-        var placeholder = $"[[FIGURE:{image.FigureId}]]";
-        var alt = string.IsNullOrWhiteSpace(image.Caption) ? "Figure" : image.Caption;
-        var replacement = $"![{alt}]({image.FilePath})";
-        output = output.Replace(placeholder, replacement, StringComparison.OrdinalIgnoreCase);
-    }
+        var output = summary;
+        foreach (var image in images)
+        {
+            if (string.IsNullOrWhiteSpace(image.FigureId))
+            {
+                continue;
+            }
 
-    return output;
+            var placeholder = $"[[FIGURE:{image.FigureId}]]";
+            var alt = string.IsNullOrWhiteSpace(image.Caption) ? "Figure" : image.Caption;
+            var replacement = $"![{alt}]({image.FilePath})";
+            output = output.Replace(placeholder, replacement, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return output;
+    }
 }
 
 static class ImagePersistence
