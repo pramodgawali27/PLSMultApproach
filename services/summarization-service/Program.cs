@@ -133,6 +133,8 @@ app.MapPost("/internal/summarize", async (
         configuration,
         cancellationToken);
 
+    var enrichedSummary = ReplaceFigurePlaceholders(parsed.SummaryText, generatedImages);
+
     var modelInfo = new
     {
         modelDeployment = response.ModelDeployment,
@@ -158,7 +160,8 @@ app.MapPost("/internal/summarize", async (
         {
             filePath = image.FilePath,
             contentType = image.ContentType,
-            caption = image.Caption
+            caption = image.Caption,
+            figureId = image.FigureId
         }),
         imagePrompts = parsed.ImagePrompts.Select(prompt => new
         {
@@ -170,7 +173,7 @@ app.MapPost("/internal/summarize", async (
         })
     };
 
-    return Results.Ok(new SummarizeResponse(parsed.SummaryText, System.Text.Json.JsonSerializer.Serialize(modelInfo)));
+    return Results.Ok(new SummarizeResponse(enrichedSummary, System.Text.Json.JsonSerializer.Serialize(modelInfo)));
 });
 
 app.MapGet("/health", () => Results.Ok("ok"));
@@ -180,6 +183,30 @@ app.Run();
 sealed record SummarizeRequest(Guid DocumentId, SummaryLane Lane, string StorageUri, string ContentType, string? PromptOverride);
 
 sealed record SummarizeResponse(string SummaryText, string? ModelInfoJson);
+
+static string ReplaceFigurePlaceholders(string summary, IReadOnlyList<GeneratedImageFile> images)
+{
+    if (string.IsNullOrWhiteSpace(summary) || images.Count == 0)
+    {
+        return summary;
+    }
+
+    var output = summary;
+    foreach (var image in images)
+    {
+        if (string.IsNullOrWhiteSpace(image.FigureId))
+        {
+            continue;
+        }
+
+        var placeholder = $"[[FIGURE:{image.FigureId}]]";
+        var alt = string.IsNullOrWhiteSpace(image.Caption) ? "Figure" : image.Caption;
+        var replacement = $"![{alt}]({image.FilePath})";
+        output = output.Replace(placeholder, replacement, StringComparison.OrdinalIgnoreCase);
+    }
+
+    return output;
+}
 
 static class ImagePersistence
 {

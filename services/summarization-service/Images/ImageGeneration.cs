@@ -230,7 +230,7 @@ public static class ImageGenerationPipeline
                 await File.WriteAllBytesAsync(filePath, generated.Content, cancellationToken);
             }
 
-            results.Add(new GeneratedImageFile(filePath, generated.ContentType, generated.Caption));
+            results.Add(new GeneratedImageFile(filePath, generated.ContentType, generated.Caption, generated.FigureId));
         }
 
         return results;
@@ -260,4 +260,4 @@ public static class ImageGenerationPipeline
     }
 }
 
-public sealed record GeneratedImageFile(string FilePath, string ContentType, string? Caption);
+public sealed record GeneratedImageFile(string FilePath, string ContentType, string? Caption, string? FigureId);
