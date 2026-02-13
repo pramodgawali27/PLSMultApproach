@@ -1,12 +1,15 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using PLS.BuildingBlocks.Correlation;
+using PLS.BuildingBlocks.Data;
 using PLS.BuildingBlocks.Results;
 using PLS.Contracts;
-using SummarizationService.Guardrails;
-using SummarizationService.Llm;
 using SummarizationService.Extraction;
+using SummarizationService.Guardrails;
 using SummarizationService.Images;
+using SummarizationService.Llm;
 using SummarizationService.Prompting;
+using SummarizationService.Rag;
 using SummarizationService.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -14,6 +17,12 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddHttpClient("docling");
 builder.Services.AddHttpClient("azureopenai");
 builder.Services.AddHttpClient("ollama");
+builder.Services.AddDbContext<PlsDbContext>(options =>
+{
+    var connectionString = builder.Configuration.GetConnectionString("Postgres")
+        ?? "Host=localhost;Port=5432;Database=pls;Username=pls;Password=pls";
+    options.UseNpgsql(connectionString);
+});
 var storageProvider = builder.Configuration["Storage:Provider"] ?? "Local";
 if (storageProvider.Equals("Blob", StringComparison.OrdinalIgnoreCase))
 {
@@ -28,6 +37,40 @@ builder.Services.AddSingleton<DoclingTextExtractor>();
 builder.Services.AddSingleton<ITextExtractor, HybridTextExtractor>();
 builder.Services.AddSingleton<IImageGenerator, AzureOpenAiImageGenerator>();
 builder.Services.AddSingleton<PromptTemplateStore>();
+builder.Services.AddSingleton<TextChunker>();
+var ragVectorStore = builder.Configuration["RAG_VECTORSTORE"] ?? "memory";
+var ragEmbeddings = builder.Configuration["RAG_EMBEDDINGS"] ?? "azure";
+var useAzureVectorStore = ragVectorStore.Equals("azure", StringComparison.OrdinalIgnoreCase);
+var useLocalEmbeddings = ragEmbeddings.Equals("local", StringComparison.OrdinalIgnoreCase);
+if (!useLocalEmbeddings)
+{
+    var endpoint = builder.Configuration["AZURE_OPENAI_ENDPOINT"];
+    var deployment = builder.Configuration["AZURE_OPENAI_EMBEDDING_DEPLOYMENT"];
+    if (string.IsNullOrWhiteSpace(endpoint) || string.IsNullOrWhiteSpace(deployment))
+    {
+        if (useAzureVectorStore)
+        {
+            throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_EMBEDDING_DEPLOYMENT are required for Azure vector store.");
+        }
+
+        useLocalEmbeddings = true;
+    }
+}
+
+if (useLocalEmbeddings)
+{
+    builder.Services.AddSingleton<IEmbeddingClient, FakeEmbeddingClient>();
+}
+else
+{
+    builder.Services.AddSingleton<IEmbeddingClient, AzureOpenAiEmbeddingClient>();
+}
+
+builder.Services.AddSingleton<IVectorStore>(sp => useAzureVectorStore
+    ? new AzureAiSearchVectorStore(sp.GetRequiredService<IConfiguration>())
+    : new InMemoryVectorStore());
+builder.Services.AddScoped<IRagRetriever, RagRetriever>();
+builder.Services.AddScoped<RagIndexer>();
 var llmProvider = builder.Configuration["LLM_PROVIDER"] ?? "azure";
 if (llmProvider.Equals("ollama", StringComparison.OrdinalIgnoreCase))
 {
@@ -56,10 +99,12 @@ app.MapPost("/internal/summarize", async (
     GuardrailEvaluator guardrails,
     ILLMClient llm,
     IImageGenerator imageGenerator,
+    PlsDbContext db,
+    IRagRetriever ragRetriever,
     IConfiguration configuration,
     CancellationToken cancellationToken) =>
 {
-    if (request.Lane != SummaryLane.LaneA)
+    if (request.Lane != SummaryLane.LaneA && request.Lane != SummaryLane.LaneC)
     {
         return Results.BadRequest("Lane not yet implemented.");
     }
@@ -80,12 +125,39 @@ app.MapPost("/internal/summarize", async (
         return Results.BadRequest("Guardrail policy blocked summarization.");
     }
 
-    var promptModel = new { text = extraction.Value.Text };
     var usedPromptOverride = !string.IsNullOrWhiteSpace(request.PromptOverride);
-    var template = usedPromptOverride
-        ? templates.RenderContent(request.PromptOverride!, promptModel)
-        : templates.Render(Path.Combine("lane-a", "summary.md.sbn"), promptModel);
-    var systemPrompt = "You are a helpful medical summarizer. Do not provide medical advice.";
+    string template;
+    string systemPrompt;
+    RagContext? ragContext = null;
+
+    if (request.Lane == SummaryLane.LaneC)
+    {
+        var document = await db.Documents.FirstOrDefaultAsync(x => x.Id == request.DocumentId, cancellationToken);
+        if (document is null)
+        {
+            return Results.BadRequest("Document not found for retrieval.");
+        }
+
+        ragContext = await ragRetriever.RetrieveForPlsAsync(request.DocumentId, document.TenantId, cancellationToken);
+        if (ragContext.Chunks.Count == 0)
+        {
+            return Results.BadRequest("No context available for retrieval.");
+        }
+
+        var context = RagPromptBuilder.BuildContext(ragContext);
+        template = usedPromptOverride
+            ? templates.RenderContent(request.PromptOverride!, new { context })
+            : templates.Render(Path.Combine("lane-c", "summary.md.sbn"), new { context });
+        systemPrompt = RagPromptBuilder.BuildSystemPrompt();
+    }
+    else
+    {
+        var promptModel = new { text = extraction.Value.Text };
+        template = usedPromptOverride
+            ? templates.RenderContent(request.PromptOverride!, promptModel)
+            : templates.Render(Path.Combine("lane-a", "summary.md.sbn"), promptModel);
+        systemPrompt = "You are a helpful medical summarizer. Do not provide medical advice.";
+    }
 
     var deployment = configuration["AZURE_OPENAI_DEPLOYMENT_PROMPT"]
         ?? throw new InvalidOperationException("AZURE_OPENAI_DEPLOYMENT_PROMPT is required.");
@@ -106,12 +178,16 @@ app.MapPost("/internal/summarize", async (
     var summaryWithPlaceholders = SummaryPostProcessor.EnsureFigurePlaceholders(parsed.SummaryText, parsed.ImagePrompts);
     var enrichedSummary = SummaryPostProcessor.ReplaceFigurePlaceholders(summaryWithPlaceholders, generatedImages);
     enrichedSummary = SummaryPostProcessor.NormalizeImageMarkdown(enrichedSummary);
+    if (request.Lane == SummaryLane.LaneC)
+    {
+        enrichedSummary = SummaryPostProcessor.LinkCitations(enrichedSummary);
+    }
 
     var modelInfo = new
     {
         modelDeployment = response.ModelDeployment,
         tokensEstimated = response.TokensEstimated,
-        promptTemplateId = "lane-a/summary",
+        promptTemplateId = request.Lane == SummaryLane.LaneC ? "lane-c/summary" : "lane-a/summary",
         promptOverrideUsed = usedPromptOverride,
         guardrails = new
         {
@@ -133,7 +209,8 @@ app.MapPost("/internal/summarize", async (
             filePath = image.FilePath,
             contentType = image.ContentType,
             caption = image.Caption,
-            figureId = image.FigureId
+            figureId = image.FigureId,
+            placement = parsed.ImagePrompts.FirstOrDefault(p => string.Equals(p.FigureId, image.FigureId, StringComparison.OrdinalIgnoreCase))?.Placement
         }),
         imagePrompts = parsed.ImagePrompts.Select(prompt => new
         {
@@ -142,10 +219,30 @@ app.MapPost("/internal/summarize", async (
             placement = prompt.Placement,
             style = prompt.Style,
             aspectRatio = prompt.AspectRatio
-        })
+        }),
+        retrieval = ragContext is null ? null : new
+        {
+            queries = ragContext.Queries,
+            chunks = ragContext.Chunks.Select(chunk => new
+            {
+                chunkId = chunk.ChunkId,
+                score = chunk.Score,
+                section = chunk.Section,
+                page = chunk.Page
+            })
+        }
     };
 
     return Results.Ok(new SummarizeResponse(enrichedSummary, System.Text.Json.JsonSerializer.Serialize(modelInfo)));
+});
+
+app.MapPost("/internal/index", async (
+    [FromBody] IndexRequest request,
+    RagIndexer indexer,
+    CancellationToken cancellationToken) =>
+{
+    await indexer.IndexAsync(request.DocumentId, request.TenantId, request.StorageUri, request.ContentType, cancellationToken);
+    return Results.Ok();
 });
 
 app.MapGet("/health", () => Results.Ok("ok"));
@@ -155,6 +252,8 @@ app.Run();
 sealed record SummarizeRequest(Guid DocumentId, SummaryLane Lane, string StorageUri, string ContentType, string? PromptOverride);
 
 sealed record SummarizeResponse(string SummaryText, string? ModelInfoJson);
+
+sealed record IndexRequest(Guid DocumentId, Guid TenantId, string StorageUri, string ContentType);
 
 static class SummaryPostProcessor
 {
@@ -255,6 +354,71 @@ static class SummaryPostProcessor
                 var url = match.Groups["url"].Value.Replace("\r", string.Empty).Replace("\n", string.Empty).Trim();
                 return $"![{alt}]({url})";
             });
+    }
+
+    public static string LinkCitations(string summary)
+    {
+        if (string.IsNullOrWhiteSpace(summary))
+        {
+            return summary;
+        }
+
+        var normalized = System.Text.RegularExpressions.Regex.Replace(
+            summary,
+            @"\[\s*chunk\s*(?<id>[0-9a-f]{64})\s*\]",
+            match => $"[{match.Groups["id"].Value}]",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
+
+        var orderedIds = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (System.Text.RegularExpressions.Match match in System.Text.RegularExpressions.Regex.Matches(
+                     normalized,
+                     @"\[(?<id>[0-9a-f]{64})\]",
+                     System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+        {
+            var id = match.Groups["id"].Value;
+            if (seen.Add(id))
+            {
+                orderedIds.Add(id);
+            }
+        }
+
+        if (orderedIds.Count == 0)
+        {
+            return normalized;
+        }
+
+        var citationIndex = orderedIds
+            .Select((id, index) => new { id, index })
+            .ToDictionary(item => item.id, item => item.index + 1, StringComparer.OrdinalIgnoreCase);
+
+        var linked = System.Text.RegularExpressions.Regex.Replace(
+            normalized,
+            @"\[(?<id>[0-9a-f]{64})\]",
+            match =>
+            {
+                var id = match.Groups["id"].Value;
+                if (!citationIndex.TryGetValue(id, out var index))
+                {
+                    return match.Value;
+                }
+                return $"[\\[{index}\\]](#evidence-{index})";
+            },
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        if (linked.Contains("### Citations", StringComparison.OrdinalIgnoreCase))
+        {
+            return linked;
+        }
+
+        var builder = new System.Text.StringBuilder(linked);
+        builder.AppendLine();
+        builder.AppendLine();
+        builder.AppendLine("### Citations");
+        var citationLine = string.Join(string.Empty, citationIndex.Values.Select(index => $"[\\[{index}\\]](#evidence-{index})"));
+        builder.AppendLine(citationLine);
+
+        return builder.ToString();
     }
 }
 

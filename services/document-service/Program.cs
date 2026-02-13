@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using System.Net.Http.Json;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -59,6 +60,12 @@ builder.Services.AddDbContext<PlsDbContext>(options =>
     options.UseNpgsql(connectionString, o => o.MigrationsAssembly("DocumentService"));
 });
 
+builder.Services.AddHttpClient("summarization", client =>
+{
+    var baseUrl = builder.Configuration["SummarizationService:BaseUrl"] ?? "http://summarization-service";
+    client.BaseAddress = new Uri(baseUrl);
+});
+
 var storageProvider = builder.Configuration["Storage:Provider"] ?? "Local";
 if (storageProvider.Equals("Blob", StringComparison.OrdinalIgnoreCase))
 {
@@ -69,7 +76,7 @@ else
     builder.Services.AddSingleton<IFileStorage, LocalFileStorage>();
 }
 builder.Services.AddSingleton<IMalwareScanner, NoopMalwareScanner>();
-builder.Services.AddSingleton<IEventPublisher, NoopEventPublisher>();
+builder.Services.AddSingleton<IEventPublisher, HttpEventPublisher>();
 builder.Services.AddSingleton<SummaryExportService>();
 builder.Services.AddSingleton<SummaryImageExtractor>();
 builder.Services.AddScoped<IAuditLogger, DbAuditLogger>();
@@ -128,7 +135,7 @@ app.MapPost("/api/auth/dev-login", async (DevLoginRequest request, PlsDbContext 
             Id = Guid.NewGuid(),
             TenantId = tenant.Id,
             PlanName = "Free",
-            EnabledLanes = (int)LaneFlags.LaneA,
+            EnabledLanes = (int)(LaneFlags.LaneA | LaneFlags.LaneC),
             TokenQuotaMonthly = 10000,
             ActiveFrom = DateTimeOffset.UtcNow
         };
@@ -315,7 +322,15 @@ app.MapGet("/api/summaries/{summaryId:guid}", async (Guid summaryId, HttpContext
             return Results.NotFound();
         }
 
-        return Results.Ok(new SummaryResponse(summary.Id, summary.DocumentId, summary.Lane, summary.SummaryText, summary.ModelInfoJson, summary.CreatedAt));
+        var citations = EvidenceExtractor.Extract(summary.SummaryText, summary.ModelInfoJson, summary.DocumentId, tenantId, db);
+        return Results.Ok(new SummaryResponse(
+            summary.Id,
+            summary.DocumentId,
+            summary.Lane,
+            summary.SummaryText,
+            summary.ModelInfoJson,
+            summary.CreatedAt,
+            citations));
     })
     .RequireAuthorization();
 
@@ -367,6 +382,36 @@ app.MapGet("/api/summaries/{summaryId:guid}/download", async (
                 $"{safeBaseName}-summary-{summary.Lane}.docx"),
             _ => Results.BadRequest("Format must be pdf or docx.")
         };
+    })
+    .RequireAuthorization();
+
+app.MapGet("/api/documents/{documentId:guid}/download", async (
+        Guid documentId,
+        HttpContext httpContext,
+        PlsDbContext db) =>
+    {
+        var tenantId = httpContext.User.GetTenantId();
+        var userId = httpContext.User.GetUserId();
+
+        var document = await db.Documents.FirstOrDefaultAsync(x => x.Id == documentId && x.TenantId == tenantId && x.UserId == userId);
+        if (document is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (File.Exists(document.StorageUri))
+        {
+            var content = await File.ReadAllBytesAsync(document.StorageUri);
+            return Results.File(content, document.ContentType, document.FileName, enableRangeProcessing: true);
+        }
+
+        if (Uri.TryCreate(document.StorageUri, UriKind.Absolute, out var uri)
+            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+        {
+            return Results.Redirect(document.StorageUri);
+        }
+
+        return Results.NotFound();
     })
     .RequireAuthorization();
 
@@ -564,5 +609,204 @@ sealed class NoopEventPublisher : IEventPublisher
     {
         _logger.LogInformation("DocumentUploaded event queued for {DocumentId}", documentUploadedEvent.DocumentId);
         return Task.CompletedTask;
+    }
+}
+
+sealed class HttpEventPublisher : IEventPublisher
+{
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ILogger<HttpEventPublisher> _logger;
+
+    public HttpEventPublisher(IHttpClientFactory httpClientFactory, ILogger<HttpEventPublisher> logger)
+    {
+        _httpClientFactory = httpClientFactory;
+        _logger = logger;
+    }
+
+    public async Task PublishAsync(DocumentUploadedEvent documentUploadedEvent)
+    {
+        var client = _httpClientFactory.CreateClient("summarization");
+        var payload = new IndexRequest(
+            documentUploadedEvent.DocumentId,
+            documentUploadedEvent.TenantId,
+            documentUploadedEvent.StorageUri,
+            documentUploadedEvent.ContentType);
+
+        try
+        {
+            var response = await client.PostAsJsonAsync("/internal/index", payload);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning(
+                    "Indexing request failed for {DocumentId} with {StatusCode}",
+                    documentUploadedEvent.DocumentId,
+                    response.StatusCode);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Indexing request failed for {DocumentId}", documentUploadedEvent.DocumentId);
+        }
+    }
+}
+
+sealed record IndexRequest(Guid DocumentId, Guid TenantId, string StorageUri, string ContentType);
+
+static class EvidenceExtractor
+{
+    private const int SnippetLimit = 280;
+
+    public static IReadOnlyList<EvidenceSection> Extract(
+        string summaryText,
+        string? modelInfoJson,
+        Guid documentId,
+        Guid tenantId,
+        PlsDbContext db)
+    {
+        if (string.IsNullOrWhiteSpace(modelInfoJson))
+        {
+            return Array.Empty<EvidenceSection>();
+        }
+
+        var chunkIds = ExtractChunkIds(summaryText);
+        if (chunkIds.Count == 0)
+        {
+            return Array.Empty<EvidenceSection>();
+        }
+
+        List<EvidenceItem> items;
+        try
+        {
+            var chunkMeta = ExtractChunkMeta(modelInfoJson);
+
+            var chunkTextLookup = db.DocumentChunks
+                .Where(x => x.TenantId == tenantId && x.DocumentId == documentId && chunkIds.Contains(x.ChunkId))
+                .Select(x => new { x.ChunkId, x.Text })
+                .ToList()
+                .ToDictionary(x => x.ChunkId, x => x.Text, StringComparer.OrdinalIgnoreCase);
+
+            items = new List<EvidenceItem>();
+            for (var i = 0; i < chunkIds.Count; i++)
+            {
+                var chunkId = chunkIds[i];
+                chunkTextLookup.TryGetValue(chunkId, out var text);
+                chunkMeta.TryGetValue(chunkId, out var meta);
+                var snippet = Truncate(text);
+                var sourceUrl = BuildSourceUrl(documentId, meta.Page);
+                items.Add(new EvidenceItem(chunkId, snippet, meta.Page, meta.Section, i + 1, sourceUrl));
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return Array.Empty<EvidenceSection>();
+        }
+
+        return items.Count == 0
+            ? Array.Empty<EvidenceSection>()
+            : new[] { new EvidenceSection("Retrieved context", items) };
+    }
+
+    private static string? Truncate(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        if (text.Length <= SnippetLimit)
+        {
+            return text;
+        }
+
+        return $"{text[..SnippetLimit]}...";
+    }
+
+    private static string BuildSourceUrl(Guid documentId, int? page)
+    {
+        var baseUrl = $"/api/documents/{documentId}/download";
+        if (page.HasValue && page.Value > 0)
+        {
+            return $"{baseUrl}#page={page.Value}";
+        }
+
+        return baseUrl;
+    }
+
+    private static List<string> ExtractChunkIds(string summaryText)
+    {
+        var normalized = System.Text.RegularExpressions.Regex.Replace(
+            summaryText ?? string.Empty,
+            @"\[\s*chunk\s*(?<id>[0-9a-f]{64})\s*\]",
+            match => $"[{match.Groups["id"].Value}]",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
+
+        var ids = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (System.Text.RegularExpressions.Match match in System.Text.RegularExpressions.Regex.Matches(
+                     normalized,
+                     @"\[(?<id>[0-9a-f]{64})\]",
+                     System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+        {
+            var id = match.Groups["id"].Value;
+            if (seen.Add(id))
+            {
+                ids.Add(id);
+            }
+        }
+
+        return ids;
+    }
+
+    private static Dictionary<string, (int? Page, string? Section)> ExtractChunkMeta(string? modelInfoJson)
+    {
+        var chunkMeta = new Dictionary<string, (int? Page, string? Section)>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(modelInfoJson))
+        {
+            return chunkMeta;
+        }
+
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(modelInfoJson);
+            if (!doc.RootElement.TryGetProperty("retrieval", out var retrieval))
+            {
+                return chunkMeta;
+            }
+
+            if (!retrieval.TryGetProperty("chunks", out var chunksElement)
+                || chunksElement.ValueKind != System.Text.Json.JsonValueKind.Array)
+            {
+                return chunkMeta;
+            }
+
+            foreach (var chunk in chunksElement.EnumerateArray())
+            {
+                if (!chunk.TryGetProperty("chunkId", out var idElement))
+                {
+                    continue;
+                }
+
+                var chunkId = idElement.GetString();
+                if (string.IsNullOrWhiteSpace(chunkId))
+                {
+                    continue;
+                }
+
+                var page = chunk.TryGetProperty("page", out var pageElement) && pageElement.TryGetInt32(out var pageValue)
+                    ? pageValue
+                    : (int?)null;
+                var section = chunk.TryGetProperty("section", out var sectionElement)
+                    ? sectionElement.GetString()
+                    : null;
+
+                chunkMeta[chunkId] = (page, section);
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return chunkMeta;
+        }
+
+        return chunkMeta;
     }
 }

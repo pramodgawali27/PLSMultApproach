@@ -37,6 +37,7 @@ services:
       Database__RunMigrations: "true"
       ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=pls;Username=pls;Password=pls
       LocalStorage__BasePath: /data/storage
+      SummarizationService__BaseUrl: http://summarization-service:8080
     ports:
       - "5072:8080"
     depends_on:
@@ -77,12 +78,15 @@ services:
       AZURE_OPENAI_DEPLOYMENT_FINETUNE: ${AZURE_OPENAI_DEPLOYMENT_FINETUNE:-}
       AZURE_OPENAI_DEPLOYMENT_AGENT: ${AZURE_OPENAI_DEPLOYMENT_AGENT:-}
       AZURE_OPENAI_DEPLOYMENT_IMAGE: ${AZURE_OPENAI_DEPLOYMENT_IMAGE:-}
+      AZURE_OPENAI_EMBEDDING_DEPLOYMENT: ${AZURE_OPENAI_EMBEDDING_DEPLOYMENT:-}
       AZURE_OPENAI_KEY: ${AZURE_OPENAI_KEY:-}
       AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-}
       AZURE_SEARCH_ENDPOINT: ${AZURE_SEARCH_ENDPOINT:-}
       AZURE_SEARCH_INDEX_NAME: ${AZURE_SEARCH_INDEX_NAME:-}
       AZURE_SEARCH_KEY: ${AZURE_SEARCH_KEY:-}
-      AZURE_SEARCH_EMBEDDING_DEPLOYMENT: ${AZURE_SEARCH_EMBEDDING_DEPLOYMENT:-}
+      RAG_VECTORSTORE: ${RAG_VECTORSTORE:-memory}
+      RAG_EMBEDDINGS: ${RAG_EMBEDDINGS:-local}
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=pls;Username=pls;Password=pls
     ports:
       - "5074:8080"
     volumes:

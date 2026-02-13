@@ -73,6 +73,30 @@ public sealed class Summary
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
+public sealed class DocumentChunk
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+    public Guid DocumentId { get; set; }
+    public string ChunkId { get; set; } = string.Empty;
+    public int? Page { get; set; }
+    public string? Section { get; set; }
+    public string Hash { get; set; } = string.Empty;
+    public string? Text { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+public sealed class RetrievalRun
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+    public Guid DocumentId { get; set; }
+    public SummaryLane Lane { get; set; }
+    public string Query { get; set; } = string.Empty;
+    public string HitsJson { get; set; } = string.Empty;
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
 public sealed class AuditLog
 {
     public Guid Id { get; set; }

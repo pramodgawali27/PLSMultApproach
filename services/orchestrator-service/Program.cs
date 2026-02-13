@@ -106,7 +106,11 @@ sealed class JobOrchestratorWorker : BackgroundService
 
         if (!response.IsSuccessStatusCode)
         {
-            JobStateMachine.Fail(job, $"Summarization failed with status {response.StatusCode}.");
+            var errorBody = await response.Content.ReadAsStringAsync(stoppingToken);
+            var message = string.IsNullOrWhiteSpace(errorBody)
+                ? $"Summarization failed with status {response.StatusCode}."
+                : $"Summarization failed with status {response.StatusCode}: {errorBody}";
+            JobStateMachine.Fail(job, message);
             document.Status = DocumentStatus.Failed;
             await db.SaveChangesAsync(stoppingToken);
             return;

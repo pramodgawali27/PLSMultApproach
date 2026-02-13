@@ -12,25 +12,33 @@ export default function SummaryRenderer({ content }: SummaryRendererProps) {
         remarkPlugins={[remarkGfm]}
         components={{
           h1: ({ children }) => (
-            <h1 className="text-2xl font-semibold text-slate-900">{children}</h1>
+            <h1 className="text-3xl font-semibold text-slate-900">{children}</h1>
           ),
           h2: ({ children }) => (
-            <h2 className="text-xl font-semibold text-slate-900">{children}</h2>
+            <h2 className="text-2xl font-semibold text-slate-900">{children}</h2>
           ),
           h3: ({ children }) => (
-            <h3 className="text-lg font-semibold text-slate-900">{children}</h3>
+            <h3 className="text-xl font-semibold text-slate-900">{children}</h3>
           ),
           p: ({ children }) => (
-            <p className="rounded-xl bg-white/80 px-4 py-3 text-sm leading-relaxed text-slate-800">
+            <p className="rounded-xl bg-white/80 px-5 py-4 text-[16px] leading-8 text-slate-800">
               {children}
             </p>
           ),
           ul: ({ children }) => (
-            <ul className="list-disc space-y-2 rounded-xl bg-white/80 px-6 py-3 text-sm text-slate-800">
+            <ul className="list-disc space-y-3 rounded-xl bg-white/80 px-7 py-4 text-[16px] leading-8 text-slate-800">
               {children}
             </ul>
           ),
-          li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+          li: ({ children }) => <li className="leading-8">{children}</li>,
+          strong: ({ children }) => (
+            <strong className="font-semibold text-ink">{children}</strong>
+          ),
+          a: ({ children, href }) => (
+            <a className="font-semibold text-ink underline" href={href}>
+              {children}
+            </a>
+          ),
           img: ({ src, alt }) => (
             <img
               src={src}

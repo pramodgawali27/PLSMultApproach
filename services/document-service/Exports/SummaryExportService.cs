@@ -27,8 +27,8 @@ public sealed class SummaryExportService
         {
             container.Page(page =>
             {
-                page.Margin(40);
-                page.DefaultTextStyle(style => style.FontFamily("DejaVu Sans").FontSize(11).FontColor("#1F2937"));
+                page.Margin(32);
+                page.DefaultTextStyle(style => style.FontFamily("DejaVu Sans").FontSize(12).FontColor("#1F2937"));
                 page.Header().Element(header => BuildPdfHeader(header, data));
                 page.Content().Column(column =>
                 {
@@ -146,7 +146,7 @@ public sealed class SummaryExportService
     {
         var paragraph = new Paragraph();
         var run = new Run();
-        var lines = NormalizeSummaryText(data.SummaryText)
+        var lines = StripBoldMarkers(NormalizeSummaryText(data.SummaryText))
             .Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
         for (var i = 0; i < lines.Length; i++)
         {
@@ -169,6 +169,14 @@ public sealed class SummaryExportService
     }
 
     private static string NormalizeSummaryText(string text)
+        => Regex.Replace(
+            text.Replace("\r", string.Empty, StringComparison.Ordinal),
+            @"\[(?<label>[^\]]+)\]\([^)]+\)",
+            "[$1]")
+            .Replace(@"\[", "[", StringComparison.Ordinal)
+            .Replace(@"\]", "]", StringComparison.Ordinal);
+
+    private static string StripBoldMarkers(string text)
         => text.Replace("**", string.Empty, StringComparison.Ordinal);
 
     private static IReadOnlyList<SummarySection> ParseSections(string text)
@@ -223,7 +231,30 @@ public sealed class SummaryExportService
         {
             col.Item().Background(style.AccentColor).PaddingVertical(6).PaddingHorizontal(10)
                 .Text(section.Title).FontSize(12).SemiBold().FontColor("#FFFFFF");
-            col.Item().PaddingTop(6).Text(section.Body).FontSize(11).LineHeight(1.4f).FontColor("#1F2937");
+            col.Item().PaddingTop(6).Column(bodyCol =>
+            {
+                var lines = section.Body.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+                foreach (var line in lines)
+                {
+                    if (string.IsNullOrWhiteSpace(line))
+                    {
+                        continue;
+                    }
+
+                    bodyCol.Item().Text(text =>
+                    {
+                        text.DefaultTextStyle(style => style.FontSize(12).LineHeight(1.5f).FontColor("#1F2937"));
+                        foreach (var segment in ParseBoldSegments(line))
+                        {
+                            var span = text.Span(segment.Text);
+                            if (segment.IsBold)
+                            {
+                                span.SemiBold();
+                            }
+                        }
+                    });
+                }
+            });
             if (images.Count > 0)
             {
                 col.Item().PaddingTop(10).Column(imageCol =>
@@ -253,7 +284,8 @@ public sealed class SummaryExportService
         }
 
         var matches = remaining
-            .Where(image => CaptionMatchesSection(image.Caption ?? string.Empty, title))
+            .Where(image => PlacementMatchesSection(image.Placement, title)
+                || CaptionMatchesSection(image.Caption ?? string.Empty, title))
             .ToList();
 
         if (matches.Count == 0)
@@ -294,6 +326,47 @@ public sealed class SummaryExportService
         }
 
         return normalizedCaption.Contains(normalizedTitle);
+    }
+
+    private static bool PlacementMatchesSection(string? placement, string title)
+    {
+        if (string.IsNullOrWhiteSpace(placement) || string.IsNullOrWhiteSpace(title))
+        {
+            return false;
+        }
+
+        return placement.Trim().Equals(title.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static IEnumerable<(string Text, bool IsBold)> ParseBoldSegments(string line)
+    {
+        if (string.IsNullOrEmpty(line))
+        {
+            yield break;
+        }
+
+        var pattern = new Regex(@"\*\*(?<bold>.+?)\*\*");
+        var lastIndex = 0;
+        foreach (Match match in pattern.Matches(line))
+        {
+            if (match.Index > lastIndex)
+            {
+                yield return (line.Substring(lastIndex, match.Index - lastIndex), false);
+            }
+
+            var boldText = match.Groups["bold"].Value;
+            if (!string.IsNullOrEmpty(boldText))
+            {
+                yield return (boldText, true);
+            }
+
+            lastIndex = match.Index + match.Length;
+        }
+
+        if (lastIndex < line.Length)
+        {
+            yield return (line[lastIndex..], false);
+        }
     }
 }
 

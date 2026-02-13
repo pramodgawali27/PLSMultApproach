@@ -28,7 +28,7 @@ static class SeedData
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             PlanName = "Starter",
-            EnabledLanes = (int)LaneFlags.LaneA,
+            EnabledLanes = (int)(LaneFlags.LaneA | LaneFlags.LaneC),
             TokenQuotaMonthly = 10000,
             ActiveFrom = DateTimeOffset.UtcNow
         });

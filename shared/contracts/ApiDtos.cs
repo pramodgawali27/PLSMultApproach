@@ -16,7 +16,18 @@ public sealed record SummaryResponse(
     SummaryLane Lane,
     string SummaryText,
     string? ModelInfoJson,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    IReadOnlyList<EvidenceSection>? Citations);
+
+public sealed record EvidenceSection(string Title, IReadOnlyList<EvidenceItem> Items);
+
+public sealed record EvidenceItem(
+    string ChunkId,
+    string? Snippet,
+    int? Page,
+    string? Section,
+    int? Index,
+    string? SourceUrl);
 
 public sealed record SummaryListItem(
     Guid SummaryId,

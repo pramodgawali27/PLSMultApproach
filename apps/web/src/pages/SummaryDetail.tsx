@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { downloadSummary, fetchSummary } from "../api";
 import StatusBadge from "../components/StatusBadge";
@@ -10,12 +10,19 @@ const tabs = ["Summary", "Evidence", "Metadata", "Audit"] as const;
 
 export default function SummaryDetail() {
   const { summaryId } = useParams();
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState<(typeof tabs)[number]>("Summary");
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["summary", summaryId],
     queryFn: () => fetchSummary(summaryId!)
   });
+
+  useEffect(() => {
+    if (location.hash.startsWith("#evidence-")) {
+      setActiveTab("Evidence");
+    }
+  }, [location.hash]);
 
   if (isLoading) {
     return <p className="text-sm text-slate-500">Loading summary...</p>;

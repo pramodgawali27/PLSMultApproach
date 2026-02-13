@@ -12,9 +12,11 @@
     <PackageReference Include="UglyToad.PdfPig" Version="1.7.0-custom-5" />
     <PackageReference Include="Azure.AI.OpenAI" Version="1.0.0-beta.17" />
     <PackageReference Include="Azure.Identity" Version="1.11.0" />
+    <PackageReference Include="Azure.Search.Documents" Version="11.6.0" />
     <PackageReference Include="Scriban" Version="5.7.0" />
     <PackageReference Include="Microsoft.SemanticKernel" Version="1.16.1" />
     <PackageReference Include="Azure.Storage.Blobs" Version="12.20.0" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.8" />
   </ItemGroup>
 
   <ItemGroup>

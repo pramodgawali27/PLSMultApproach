@@ -39,7 +39,7 @@ public sealed class SummaryImageExtractor
                 continue;
             }
 
-            images.Add(new SummaryImage(data, imagePart.ContentType, null));
+            images.Add(new SummaryImage(data, imagePart.ContentType, null, null));
             if (images.Count >= MaxImages)
             {
                 break;
@@ -113,10 +113,13 @@ public sealed class SummaryImageExtractor
             var caption = imageElement.TryGetProperty("caption", out var captionElement)
                 ? captionElement.GetString()
                 : null;
+            var placement = imageElement.TryGetProperty("placement", out var placementElement)
+                ? placementElement.GetString()
+                : null;
 
-            yield return new SummaryImage(File.ReadAllBytes(filePath), contentType, caption);
+            yield return new SummaryImage(File.ReadAllBytes(filePath), contentType, caption, placement);
         }
     }
 }
 
-public sealed record SummaryImage(byte[] Content, string ContentType, string? Caption);
+public sealed record SummaryImage(byte[] Content, string ContentType, string? Caption, string? Placement);
