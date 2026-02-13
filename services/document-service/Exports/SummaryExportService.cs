@@ -17,10 +17,10 @@ public sealed class SummaryExportService
         var sections = ParseSections(data.SummaryText);
         var palette = new[]
         {
-            new SectionStyle("#EAF2FF", "#1B2A4E"),
-            new SectionStyle("#F5F0FF", "#3B2A5F"),
-            new SectionStyle("#EAF7F1", "#1F4A3A"),
-            new SectionStyle("#FFF4E5", "#6B3A1B")
+            new SectionStyle("#E9EEF5", "#0B2D72", "#2BA4E3"),
+            new SectionStyle("#EEF2F7", "#0B2D72", "#2BA4E3"),
+            new SectionStyle("#E9EEF5", "#0B2D72", "#2BA4E3"),
+            new SectionStyle("#EEF2F7", "#0B2D72", "#2BA4E3")
         };
 
         var document = QDocument.Create(container =>
@@ -32,15 +32,20 @@ public sealed class SummaryExportService
                 page.Header().Element(header => BuildPdfHeader(header, data));
                 page.Content().Column(column =>
                 {
-                    if (images.Count > 0)
-                    {
-                        column.Item().Element(content => BuildImageRow(content, images));
-                    }
-
+                    var remainingImages = images.ToList();
                     foreach (var (section, index) in sections.Select((section, index) => (section, index)))
                     {
                         var style = palette[index % palette.Length];
-                        column.Item().Element(content => BuildSectionCard(content, section, style));
+                        var matched = MatchImagesForSection(section.Title, remainingImages);
+                        column.Item().Element(content => BuildSectionCard(content, section, style, matched));
+                    }
+
+                    if (remainingImages.Count > 0)
+                    {
+                        var style = palette[0];
+                        var figureSection = new SummarySection("Figures", string.Empty);
+                        column.Item().Element(content => BuildSectionCard(content, figureSection, style, remainingImages));
+                        remainingImages.Clear();
                     }
                 });
                 page.Footer().Element(footer => BuildPdfFooter(footer, data));
@@ -81,19 +86,26 @@ public sealed class SummaryExportService
 
     private static void BuildPdfHeader(IContainer container, SummaryExportData data)
     {
-        container.Row(row =>
+        container.Column(col =>
         {
-            row.RelativeItem().Column(col =>
+            col.Item().PaddingBottom(8).Text("Plain Language Summary of Publication")
+                .FontSize(10)
+                .FontColor("#0B2D72");
+            col.Item().Background("#0B2D72").PaddingVertical(14).PaddingHorizontal(16).Row(row =>
             {
-                col.Item().Text("Plain Language Summary").FontSize(18).SemiBold().FontColor("#0F172A");
-                col.Item().Text(data.DocumentName).FontSize(10).FontColor("#64748B");
-            });
-            row.ConstantItem(160).AlignRight().Text(text =>
-            {
-                text.DefaultTextStyle(style => style.FontSize(10).FontColor("#334155"));
-                text.Span("Lane ");
-                text.Span(data.LaneLabel.Replace("Lane", string.Empty, StringComparison.OrdinalIgnoreCase))
-                    .SemiBold();
+                row.RelativeItem().Column(text =>
+                {
+                    text.Item().Text(data.DocumentName).FontSize(16).FontColor("#FFFFFF").SemiBold();
+                    text.Item().Text($"Lane {data.LaneLabel.Replace("Lane", string.Empty, StringComparison.OrdinalIgnoreCase)}")
+                        .FontSize(9)
+                        .FontColor("#CFE3FF");
+                });
+                row.ConstantItem(64).AlignRight().AlignMiddle().Element(card =>
+                {
+                    card.Width(56).Height(56).Background("#2BA4E3").Border(2).BorderColor("#FFFFFF")
+                        .AlignCenter().AlignMiddle()
+                        .Text("PLS").FontColor("#FFFFFF").FontSize(12).SemiBold();
+                });
             });
         });
     }
@@ -201,37 +213,87 @@ public sealed class SummaryExportService
         return string.IsNullOrWhiteSpace(trimmed) ? "Section" : trimmed;
     }
 
-    private static void BuildSectionCard(IContainer container, SummarySection section, SectionStyle style)
+    private static void BuildSectionCard(
+        IContainer container,
+        SummarySection section,
+        SectionStyle style,
+        IReadOnlyList<SummaryImage> images)
     {
-        container.PaddingVertical(6).PaddingHorizontal(2).Background(style.Background).Border(1).BorderColor("#E2E8F0").Padding(14).Column(col =>
+        container.PaddingVertical(6).PaddingHorizontal(2).Background(style.Background).Border(1).BorderColor("#D5DDE8").Padding(14).Column(col =>
         {
-            col.Item().Text(section.Title).FontSize(13).SemiBold().FontColor(style.TitleColor);
+            col.Item().Background(style.AccentColor).PaddingVertical(6).PaddingHorizontal(10)
+                .Text(section.Title).FontSize(12).SemiBold().FontColor("#FFFFFF");
             col.Item().PaddingTop(6).Text(section.Body).FontSize(11).LineHeight(1.4f).FontColor("#1F2937");
+            if (images.Count > 0)
+            {
+                col.Item().PaddingTop(10).Column(imageCol =>
+                {
+                    foreach (var image in images)
+                    {
+                        imageCol.Item().Background("#FFFFFF").Border(1).BorderColor("#D5DDE8").Padding(8)
+                            .Column(img =>
+                            {
+                                img.Item().AlignMiddle().Image(image.Content).FitWidth();
+                                if (!string.IsNullOrWhiteSpace(image.Caption))
+                                {
+                                    img.Item().PaddingTop(4).Text(image.Caption!).FontSize(9).FontColor("#475569");
+                                }
+                            });
+                    }
+                });
+            }
         });
     }
 
-    private static void BuildImageRow(IContainer container, IReadOnlyList<SummaryImage> images)
+    private static IReadOnlyList<SummaryImage> MatchImagesForSection(string title, List<SummaryImage> remaining)
     {
-        container.PaddingBottom(12).Column(column =>
+        if (remaining.Count == 0)
         {
-            column.Item().Text("Key figures").FontSize(12).SemiBold().FontColor("#0F172A");
-            column.Item().Row(row =>
-            {
-                foreach (var image in images)
-                {
-                    row.RelativeItem().PaddingRight(6).Border(1).BorderColor("#E2E8F0").Padding(6)
-                        .Background("#FFFFFF")
-                        .Column(col =>
-                        {
-                            col.Item().AlignMiddle().Image(image.Content).FitArea();
-                            if (!string.IsNullOrWhiteSpace(image.Caption))
-                            {
-                                col.Item().PaddingTop(4).Text(image.Caption!).FontSize(9).FontColor("#475569");
-                            }
-                        });
-                }
-            });
-        });
+            return Array.Empty<SummaryImage>();
+        }
+
+        var matches = remaining
+            .Where(image => CaptionMatchesSection(image.Caption ?? string.Empty, title))
+            .ToList();
+
+        if (matches.Count == 0)
+        {
+            return Array.Empty<SummaryImage>();
+        }
+
+        foreach (var match in matches)
+        {
+            remaining.Remove(match);
+        }
+
+        return matches;
+    }
+
+    private static bool CaptionMatchesSection(string caption, string title)
+    {
+        if (string.IsNullOrWhiteSpace(caption) || string.IsNullOrWhiteSpace(title))
+        {
+            return false;
+        }
+
+        var normalizedCaption = caption.ToLowerInvariant();
+        var normalizedTitle = title.ToLowerInvariant();
+        if (normalizedTitle.Contains("how was") || normalizedTitle.Contains("study done"))
+        {
+            return normalizedCaption.Contains("design");
+        }
+
+        if (normalizedTitle.Contains("results"))
+        {
+            return normalizedCaption.Contains("result") || normalizedCaption.Contains("outcome");
+        }
+
+        if (normalizedTitle.Contains("side effects") || normalizedTitle.Contains("safety"))
+        {
+            return normalizedCaption.Contains("safety") || normalizedCaption.Contains("adverse");
+        }
+
+        return normalizedCaption.Contains(normalizedTitle);
     }
 }
 
@@ -256,4 +318,4 @@ public sealed class SummarySection
     public string Body { get; set; }
 }
 
-public sealed record SectionStyle(string Background, string TitleColor);
+public sealed record SectionStyle(string Background, string TitleColor, string AccentColor);
