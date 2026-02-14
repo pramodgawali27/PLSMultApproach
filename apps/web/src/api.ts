@@ -1,4 +1,4 @@
-export type SummaryLane = "LaneA" | "LaneB" | "LaneC" | "LaneD";
+export type SummaryLane = "LaneA" | "LaneB" | "LaneC" | "LaneD" | "LaneE";
 export type JobStatus = "Queued" | "Processing" | "Completed" | "Failed";
 export type Audience = "Patients" | "General public" | "Healthcare professionals";
 

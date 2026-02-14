@@ -7,7 +7,7 @@ type SummaryRendererProps = {
 
 export default function SummaryRenderer({ content }: SummaryRendererProps) {
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -15,18 +15,20 @@ export default function SummaryRenderer({ content }: SummaryRendererProps) {
             <h1 className="text-3xl font-semibold text-slate-900">{children}</h1>
           ),
           h2: ({ children }) => (
-            <h2 className="text-2xl font-semibold text-slate-900">{children}</h2>
+            <h2 className="rounded-xl bg-ink px-5 py-3 text-xl font-semibold text-fog">
+              {children}
+            </h2>
           ),
           h3: ({ children }) => (
-            <h3 className="text-xl font-semibold text-slate-900">{children}</h3>
+            <h3 className="rounded-lg border border-ink/10 bg-white/90 px-4 py-2 text-lg font-semibold text-ink">
+              {children}
+            </h3>
           ),
           p: ({ children }) => (
-            <p className="rounded-xl bg-white/80 px-5 py-4 text-[16px] leading-8 text-slate-800">
-              {children}
-            </p>
+            <p className="text-[17px] leading-8 text-slate-900">{children}</p>
           ),
           ul: ({ children }) => (
-            <ul className="list-disc space-y-3 rounded-xl bg-white/80 px-7 py-4 text-[16px] leading-8 text-slate-800">
+            <ul className="list-disc space-y-3 pl-6 text-[17px] leading-8 text-slate-900">
               {children}
             </ul>
           ),

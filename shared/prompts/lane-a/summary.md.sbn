@@ -144,6 +144,11 @@ IMPORTANT:
 ---
 
 ## Input
+Document metadata (optional):
+- Title: {{ metadata.title }}
+- Therapeutic area: {{ metadata.therapeuticArea }}
+- Audience: {{ metadata.audience }}
+
 Document:
 {{ text }}
 

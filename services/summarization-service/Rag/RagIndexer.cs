@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PLS.BuildingBlocks.Data;
+using SummarizationService.Diagnostics;
 using SummarizationService.Extraction;
 
 namespace SummarizationService.Rag;
@@ -31,17 +32,25 @@ public sealed class RagIndexer
 
     public async Task IndexAsync(Guid documentId, Guid tenantId, string storageUri, string contentType, CancellationToken cancellationToken)
     {
+        var trace = RunTrace.Create(_configuration, documentId, "index");
         var extraction = await _extractor.ExtractAsync(documentId, storageUri, contentType);
         if (!extraction.IsSuccess || extraction.Value is null)
         {
             throw new InvalidOperationException(extraction.Error ?? "Failed to extract text.");
         }
+        trace?.WriteText("01_extraction.txt", extraction.Value.Text);
 
         var chunks = _chunker.Chunk(extraction.Value.Text);
         if (chunks.Count == 0)
         {
             return;
         }
+        trace?.WriteJson("02_chunks.json", chunks.Select(chunk => new
+        {
+            chunk.Index,
+            chunk.Section,
+            chunk.Content
+        }));
 
         var storeText = _configuration.GetValue("RAG_STORE_TEXT", false);
         var vectorChunks = new List<VectorChunk>();

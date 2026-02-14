@@ -114,35 +114,117 @@ public sealed class ImagePromptParser
         }
 
         var summary = output;
-        var jsonBlock = string.Empty;
+        var jsonBlocks = new List<string>();
 
         var blockBIndex = output.IndexOf("BLOCK B", StringComparison.OrdinalIgnoreCase);
         if (blockBIndex >= 0)
         {
-            jsonBlock = output.Substring(blockBIndex);
             summary = output.Substring(0, blockBIndex);
         }
 
+        var fencedMatches = Regex.Matches(output, @"```(?:json)?\s*(\[[\s\S]*?\])\s*```",
+            RegexOptions.IgnoreCase);
+        foreach (Match match in fencedMatches)
+        {
+            if (match.Success && match.Groups.Count > 1)
+            {
+                jsonBlocks.Add(match.Groups[1].Value);
+            }
+        }
+
+        if (jsonBlocks.Count == 0)
+        {
+            var candidates = Regex.Matches(output, @"\[[\s\S]*?\]");
+            foreach (Match match in candidates)
+            {
+                if (!match.Success)
+                {
+                    continue;
+                }
+
+                var candidate = match.Value;
+                if (LooksLikeJsonArray(candidate))
+                {
+                    jsonBlocks.Add(candidate);
+                }
+            }
+        }
+
+        foreach (var block in jsonBlocks)
+        {
+            summary = summary.Replace(block, string.Empty);
+        }
+
+        if (blockBIndex >= 0 && blockBIndex < summary.Length)
+        {
+            summary = summary.Substring(0, blockBIndex);
+        }
+
         summary = Regex.Replace(summary, @"^.*BLOCK A.*$", string.Empty, RegexOptions.Multiline);
+        summary = Regex.Replace(summary, @"^.*BLOCK B.*$", string.Empty, RegexOptions.Multiline);
+        summary = Regex.Replace(summary, @"^.*IMAGE_PROMPTS_JSON.*$", string.Empty, RegexOptions.Multiline);
         summary = Regex.Replace(summary, @"^\s*\[\[FIGURE:.*?\]\]\s*$", string.Empty, RegexOptions.Multiline);
         summary = Regex.Replace(summary, @"^```[a-zA-Z]*\s*$", string.Empty, RegexOptions.Multiline);
         summary = summary.Trim();
 
-        var jsonMatch = Regex.Match(jsonBlock, @"\[[\s\S]*\]");
-        if (!jsonMatch.Success)
+        var prompts = new List<ImagePrompt>();
+        foreach (var block in jsonBlocks)
         {
-            return new ParsedOutput(summary, Array.Empty<ImagePrompt>());
+            var cleanBlock = Regex.Replace(block, @"^```[a-zA-Z]*\s*|```$", string.Empty, RegexOptions.Multiline).Trim();
+            var jsonMatch = Regex.Match(cleanBlock, @"\[[\s\S]*\]");
+            if (!jsonMatch.Success)
+            {
+                continue;
+            }
+
+            try
+            {
+                var parsed = JsonSerializer.Deserialize<List<ImagePrompt>>(jsonMatch.Value) ?? new List<ImagePrompt>();
+                prompts.AddRange(parsed);
+            }
+            catch (JsonException)
+            {
+                continue;
+            }
         }
 
-        try
+        if (prompts.Count == 0 && blockBIndex >= 0)
         {
-            var prompts = JsonSerializer.Deserialize<List<ImagePrompt>>(jsonMatch.Value) ?? new List<ImagePrompt>();
-            return new ParsedOutput(summary, prompts.Where(p => !string.IsNullOrWhiteSpace(p.Prompt)).ToList());
+            var jsonBlock = output.Substring(blockBIndex);
+            var jsonMatch = Regex.Match(jsonBlock, @"\[[\s\S]*\]");
+            if (jsonMatch.Success)
+            {
+                try
+                {
+                    var parsed = JsonSerializer.Deserialize<List<ImagePrompt>>(jsonMatch.Value) ?? new List<ImagePrompt>();
+                    prompts.AddRange(parsed);
+                }
+                catch (JsonException)
+                {
+                    // ignore
+                }
+            }
         }
-        catch (JsonException)
+
+        var distinct = prompts
+            .Where(p => !string.IsNullOrWhiteSpace(p.Prompt))
+            .GroupBy(p => p.FigureId ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First())
+            .ToList();
+
+        return new ParsedOutput(summary, distinct);
+    }
+
+    private static bool LooksLikeJsonArray(string output)
+    {
+        var trimmed = output.TrimStart();
+        if (!trimmed.StartsWith("[", StringComparison.Ordinal))
         {
-            return new ParsedOutput(summary, Array.Empty<ImagePrompt>());
+            return false;
         }
+
+        return trimmed.Contains("\"figure_id\"", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Contains("\"prompt\"", StringComparison.OrdinalIgnoreCase);
     }
 }
 

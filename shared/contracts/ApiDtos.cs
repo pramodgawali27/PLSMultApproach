@@ -17,7 +17,10 @@ public sealed record SummaryResponse(
     string SummaryText,
     string? ModelInfoJson,
     DateTimeOffset CreatedAt,
-    IReadOnlyList<EvidenceSection>? Citations);
+    IReadOnlyList<EvidenceSection>? Citations,
+    string? Title = null,
+    string? TherapeuticArea = null,
+    string? Audience = null);
 
 public sealed record EvidenceSection(string Title, IReadOnlyList<EvidenceItem> Items);
 

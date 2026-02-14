@@ -9,7 +9,8 @@ public enum LaneFlags
     LaneA = 1 << 0,
     LaneB = 1 << 1,
     LaneC = 1 << 2,
-    LaneD = 1 << 3
+    LaneD = 1 << 3,
+    LaneE = 1 << 4
 }
 
 public static class LaneEntitlements
@@ -22,6 +23,7 @@ public static class LaneEntitlements
         if (flags.HasFlag(LaneFlags.LaneB)) lanes.Add(SummaryLane.LaneB);
         if (flags.HasFlag(LaneFlags.LaneC)) lanes.Add(SummaryLane.LaneC);
         if (flags.HasFlag(LaneFlags.LaneD)) lanes.Add(SummaryLane.LaneD);
+        if (flags.HasFlag(LaneFlags.LaneE)) lanes.Add(SummaryLane.LaneE);
         return lanes;
     }
 
@@ -33,6 +35,7 @@ public static class LaneEntitlements
             SummaryLane.LaneB => LaneFlags.LaneB,
             SummaryLane.LaneC => LaneFlags.LaneC,
             SummaryLane.LaneD => LaneFlags.LaneD,
+            SummaryLane.LaneE => LaneFlags.LaneE,
             _ => LaneFlags.None
         };
 

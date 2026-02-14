@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PLS.BuildingBlocks.Data;
 using PLS.BuildingBlocks.Entitlements;
+using PLS.Contracts;
 
 static class SeedData
 {
@@ -21,7 +22,8 @@ static class SeedData
             TenantId = tenantId,
             ExternalId = Guid.NewGuid().ToString("n"),
             Email = "demo@pls.local",
-            DisplayName = "demo"
+            DisplayName = "demo",
+            Role = UserRole.TenantAdmin
         });
         db.Subscriptions.Add(new Subscription
         {

@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using System.Net.Http.Json;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -169,6 +170,9 @@ app.MapPost("/api/documents/upload", async (
         IFormFile file,
         SummaryLane? lane,
         string? promptOverride,
+        string? title,
+        string? therapeuticArea,
+        string? audience,
         PlsDbContext db,
         IFileStorage storage,
         IMalwareScanner scanner,
@@ -202,6 +206,9 @@ app.MapPost("/api/documents/upload", async (
             ContentType = file.ContentType,
             SizeBytes = file.Length,
             StorageUri = storageUri,
+            Title = string.IsNullOrWhiteSpace(title) ? null : title.Trim(),
+            TherapeuticArea = string.IsNullOrWhiteSpace(therapeuticArea) ? null : therapeuticArea.Trim(),
+            Audience = string.IsNullOrWhiteSpace(audience) ? null : audience.Trim(),
             UploadedAt = DateTimeOffset.UtcNow,
             Status = DocumentStatus.Uploaded
         };
@@ -322,15 +329,66 @@ app.MapGet("/api/summaries/{summaryId:guid}", async (Guid summaryId, HttpContext
             return Results.NotFound();
         }
 
+        var document = await db.Documents.FirstOrDefaultAsync(x => x.Id == summary.DocumentId && x.TenantId == tenantId && x.UserId == userId);
         var citations = EvidenceExtractor.Extract(summary.SummaryText, summary.ModelInfoJson, summary.DocumentId, tenantId, db);
+        var resolvedSummary = document is null
+            ? summary.SummaryText
+            : RewriteLocalImageLinks(summary.SummaryText, summary.Id, document.StorageUri);
         return Results.Ok(new SummaryResponse(
             summary.Id,
             summary.DocumentId,
             summary.Lane,
-            summary.SummaryText,
+            resolvedSummary,
             summary.ModelInfoJson,
             summary.CreatedAt,
-            citations));
+            citations,
+            document?.Title,
+            document?.TherapeuticArea,
+            document?.Audience));
+    })
+    .RequireAuthorization();
+
+app.MapGet("/api/summaries/{summaryId:guid}/images/{fileName}", async (
+        Guid summaryId,
+        string fileName,
+        HttpContext httpContext,
+        PlsDbContext db) =>
+    {
+        var tenantId = httpContext.User.GetTenantId();
+        var userId = httpContext.User.GetUserId();
+
+        var summary = await db.Summaries.FirstOrDefaultAsync(x => x.Id == summaryId && x.TenantId == tenantId && x.UserId == userId);
+        if (summary is null)
+        {
+            return Results.NotFound();
+        }
+
+        var document = await db.Documents.FirstOrDefaultAsync(x => x.Id == summary.DocumentId && x.TenantId == tenantId && x.UserId == userId);
+        if (document is null)
+        {
+            return Results.NotFound();
+        }
+
+        var safeName = Path.GetFileName(fileName);
+        if (string.IsNullOrWhiteSpace(safeName))
+        {
+            return Results.BadRequest();
+        }
+
+        var directory = Path.GetDirectoryName(document.StorageUri);
+        if (string.IsNullOrWhiteSpace(directory))
+        {
+            return Results.NotFound();
+        }
+
+        var filePath = Path.Combine(directory, safeName);
+        if (!System.IO.File.Exists(filePath))
+        {
+            return Results.NotFound();
+        }
+
+        var contentType = ResolveImageContentType(filePath);
+        return Results.File(filePath, contentType);
     })
     .RequireAuthorization();
 
@@ -358,7 +416,14 @@ app.MapGet("/api/summaries/{summaryId:guid}/download", async (
             return Results.NotFound();
         }
 
-        var exportData = new SummaryExportData(document.FileName, summary.Lane, summary.SummaryText, summary.CreatedAt);
+        var exportData = new SummaryExportData(
+            document.FileName,
+            document.Title,
+            document.TherapeuticArea,
+            document.Audience,
+            summary.Lane,
+            summary.SummaryText,
+            summary.CreatedAt);
         var images = imageExtractor.ExtractImages(document.StorageUri, document.ContentType, summary.ModelInfoJson);
         var safeBaseName = MakeSafeFileName(Path.GetFileNameWithoutExtension(document.FileName));
         var chosenFormat = string.IsNullOrWhiteSpace(format) ? "pdf" : format.Trim().ToLowerInvariant();
@@ -508,6 +573,64 @@ static string MakeSafeFileName(string name)
 
     var safe = new string(name.Select(ch => char.IsLetterOrDigit(ch) ? ch : '-').ToArray());
     return safe.Trim('-');
+}
+
+static string RewriteLocalImageLinks(string summaryText, Guid summaryId, string storageUri)
+{
+    if (string.IsNullOrWhiteSpace(summaryText))
+    {
+        return summaryText;
+    }
+
+    var directory = Path.GetDirectoryName(storageUri);
+    if (string.IsNullOrWhiteSpace(directory))
+    {
+        return summaryText;
+    }
+
+    return Regex.Replace(
+        summaryText,
+        @"!\[(?<alt>[^\]]*)\]\((?<url>[^)]+)\)",
+        match =>
+        {
+            var alt = match.Groups["alt"].Value;
+            var url = match.Groups["url"].Value.Trim();
+
+            if (Uri.TryCreate(url, UriKind.Absolute, out var absolute) &&
+                (absolute.Scheme == "http" || absolute.Scheme == "https"))
+            {
+                return match.Value;
+            }
+
+            var fileName = Path.GetFileName(url);
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                return match.Value;
+            }
+
+            var localPath = Path.Combine(directory, fileName);
+            if (!System.IO.File.Exists(localPath))
+            {
+                return match.Value;
+            }
+
+            var resolved = $"/api/summaries/{summaryId}/images/{fileName}";
+            return $"![{alt}]({resolved})";
+        });
+}
+
+static string ResolveImageContentType(string filePath)
+{
+    var extension = Path.GetExtension(filePath).ToLowerInvariant();
+    return extension switch
+    {
+        ".png" => "image/png",
+        ".jpg" => "image/jpeg",
+        ".jpeg" => "image/jpeg",
+        ".webp" => "image/webp",
+        ".gif" => "image/gif",
+        _ => "application/octet-stream"
+    };
 }
 
 app.MapGet("/health", () => Results.Ok("ok"));

@@ -4,6 +4,7 @@ using PLS.BuildingBlocks.Correlation;
 using PLS.BuildingBlocks.Data;
 using PLS.BuildingBlocks.Results;
 using PLS.Contracts;
+using SummarizationService.Diagnostics;
 using SummarizationService.Extraction;
 using SummarizationService.Guardrails;
 using SummarizationService.Images;
@@ -14,7 +15,11 @@ using SummarizationService.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddHttpClient("docling");
+builder.Services.AddHttpClient("docling", client =>
+{
+    var timeoutSeconds = builder.Configuration.GetValue("DOCLING_TIMEOUT_SECONDS", 120);
+    client.Timeout = TimeSpan.FromSeconds(Math.Clamp(timeoutSeconds, 5, 600));
+});
 builder.Services.AddHttpClient("azureopenai");
 builder.Services.AddHttpClient("ollama");
 builder.Services.AddDbContext<PlsDbContext>(options =>
@@ -101,6 +106,7 @@ app.MapPost("/internal/summarize", async (
     IImageGenerator imageGenerator,
     PlsDbContext db,
     IRagRetriever ragRetriever,
+    RagIndexer indexer,
     IConfiguration configuration,
     CancellationToken cancellationToken) =>
 {
@@ -109,11 +115,22 @@ app.MapPost("/internal/summarize", async (
         return Results.BadRequest("Lane not yet implemented.");
     }
 
+    var trace = RunTrace.Create(configuration, request.DocumentId, "summarize");
+    trace?.WriteJson("00_request.json", new
+    {
+        request.DocumentId,
+        request.Lane,
+        request.StorageUri,
+        request.ContentType,
+        request.PromptOverride
+    });
+
     var extraction = await extractor.ExtractAsync(request.DocumentId, request.StorageUri, request.ContentType);
     if (!extraction.IsSuccess || extraction.Value is null)
     {
         return Results.BadRequest(extraction.Error ?? "Failed to extract text.");
     }
+    trace?.WriteText("01_extraction.txt", extraction.Value.Text);
 
     var savedImages = ImagePersistence.Save(extraction.Value.Images, request.DocumentId, request.StorageUri, configuration);
 
@@ -129,10 +146,11 @@ app.MapPost("/internal/summarize", async (
     string template;
     string systemPrompt;
     RagContext? ragContext = null;
+    Document? document = null;
 
     if (request.Lane == SummaryLane.LaneC)
     {
-        var document = await db.Documents.FirstOrDefaultAsync(x => x.Id == request.DocumentId, cancellationToken);
+        document = await db.Documents.FirstOrDefaultAsync(x => x.Id == request.DocumentId, cancellationToken);
         if (document is null)
         {
             return Results.BadRequest("Document not found for retrieval.");
@@ -141,18 +159,56 @@ app.MapPost("/internal/summarize", async (
         ragContext = await ragRetriever.RetrieveForPlsAsync(request.DocumentId, document.TenantId, cancellationToken);
         if (ragContext.Chunks.Count == 0)
         {
-            return Results.BadRequest("No context available for retrieval.");
+            var autoIndex = configuration.GetValue("RAG_AUTO_INDEX", true);
+            if (autoIndex)
+            {
+                await indexer.IndexAsync(request.DocumentId, document.TenantId, request.StorageUri, request.ContentType, cancellationToken);
+                ragContext = await ragRetriever.RetrieveForPlsAsync(request.DocumentId, document.TenantId, cancellationToken);
+            }
+
+            if (ragContext.Chunks.Count == 0)
+            {
+                return Results.BadRequest("No context available for retrieval.");
+            }
         }
+        trace?.WriteJson("02_rag_context.json", new
+        {
+            queries = ragContext.Queries,
+            chunks = ragContext.Chunks.Select(chunk => new
+            {
+                chunk.ChunkId,
+                chunk.Score,
+                chunk.Page,
+                chunk.Section,
+                chunk.Content
+            })
+        });
 
         var context = RagPromptBuilder.BuildContext(ragContext);
+        var metadata = new
+        {
+            title = document.Title,
+            therapeuticArea = document.TherapeuticArea,
+            audience = document.Audience
+        };
         template = usedPromptOverride
-            ? templates.RenderContent(request.PromptOverride!, new { context })
-            : templates.Render(Path.Combine("lane-c", "summary.md.sbn"), new { context });
+            ? templates.RenderContent(request.PromptOverride!, new { context, metadata })
+            : templates.Render(Path.Combine("lane-c", "summary.md.sbn"), new { context, metadata });
         systemPrompt = RagPromptBuilder.BuildSystemPrompt();
     }
     else
     {
-        var promptModel = new { text = extraction.Value.Text };
+        document ??= await db.Documents.FirstOrDefaultAsync(x => x.Id == request.DocumentId, cancellationToken);
+        var promptModel = new
+        {
+            text = extraction.Value.Text,
+            metadata = new
+            {
+                title = document?.Title,
+                therapeuticArea = document?.TherapeuticArea,
+                audience = document?.Audience
+            }
+        };
         template = usedPromptOverride
             ? templates.RenderContent(request.PromptOverride!, promptModel)
             : templates.Render(Path.Combine("lane-a", "summary.md.sbn"), promptModel);
@@ -162,11 +218,61 @@ app.MapPost("/internal/summarize", async (
     var deployment = configuration["AZURE_OPENAI_DEPLOYMENT_PROMPT"]
         ?? throw new InvalidOperationException("AZURE_OPENAI_DEPLOYMENT_PROMPT is required.");
 
+    trace?.WriteText("03_system_prompt.txt", systemPrompt);
+    trace?.WriteText("04_prompt.txt", template);
+
     var response = await llm.CompleteAsync(
         new LlmRequest(systemPrompt, template, deployment, 0.2, 1400),
         cancellationToken);
+    trace?.WriteText("05_llm_response.txt", response.Text);
 
     var parsed = ImagePromptParser.Parse(response.Text);
+    if (parsed.ImagePrompts.Count == 0 && configuration.GetValue("IMAGE_PROMPT_FALLBACK", true))
+    {
+        var imageContext = SummaryPostProcessor.BuildImagePromptContext(ragContext, extraction.Value.Text, configuration);
+        if (!string.IsNullOrWhiteSpace(imageContext))
+        {
+            var imagePromptTemplate = $$"""
+You are a medical visualization assistant.
+Create 1-2 image prompts grounded in the provided context.
+Return ONLY a JSON array matching this schema:
+[
+  {
+    "figure_id": "fig_01",
+    "title": "Short title",
+    "placement": "Section heading from the summary",
+    "rationale": "1-2 lines why it helps",
+    "prompt": "A complete DALL·E prompt",
+    "style": "diagram",
+    "aspect_ratio": "wide",
+    "must_include": ["item1", "item2"],
+    "must_avoid": ["itemA", "itemB"]
+  }
+]
+Use only facts present in the context. If study design or results are described, prioritize those.
+Style requirements:
+- choose infographic, diagram, or chart to best match the context
+- keep a clean flat style with white rounded cards on a light beige background
+- use two accent colors consistently (teal and deep purple) for group labels
+- bold numbers and short labels; no logos; no photos; high contrast
+
+Context:
+{{imageContext}}
+""";
+
+            var imageResponse = await llm.CompleteAsync(
+                new LlmRequest("You generate grounded image prompts only.", imagePromptTemplate, deployment, 0.2, 600),
+                cancellationToken);
+            trace?.WriteText("05b_image_prompt_response.txt", imageResponse.Text);
+            var fallbackParsed = ImagePromptParser.Parse(imageResponse.Text);
+            if (fallbackParsed.ImagePrompts.Count > 0)
+            {
+                parsed = new ParsedOutput(parsed.SummaryText, fallbackParsed.ImagePrompts);
+            }
+        }
+    }
+    trace?.WriteText("06_parsed_summary.md", parsed.SummaryText);
+    trace?.WriteJson("07_image_prompts.json", parsed.ImagePrompts);
     var generatedImages = await ImageGenerationPipeline.GenerateAsync(
         parsed.ImagePrompts,
         request.DocumentId,
@@ -182,6 +288,7 @@ app.MapPost("/internal/summarize", async (
     {
         enrichedSummary = SummaryPostProcessor.LinkCitations(enrichedSummary);
     }
+    trace?.WriteText("08_enriched_summary.md", enrichedSummary);
 
     var modelInfo = new
     {
@@ -232,6 +339,7 @@ app.MapPost("/internal/summarize", async (
             })
         }
     };
+    trace?.WriteJson("09_model_info.json", modelInfo);
 
     return Results.Ok(new SummarizeResponse(enrichedSummary, System.Text.Json.JsonSerializer.Serialize(modelInfo)));
 });
@@ -257,6 +365,26 @@ sealed record IndexRequest(Guid DocumentId, Guid TenantId, string StorageUri, st
 
 static class SummaryPostProcessor
 {
+    public static string BuildImagePromptContext(RagContext? ragContext, string extractionText, IConfiguration configuration)
+    {
+        var maxChars = Math.Clamp(configuration.GetValue("IMAGE_PROMPT_CONTEXT_CHARS", 3000), 500, 12000);
+        if (ragContext is not null && ragContext.Chunks.Count > 0)
+        {
+            var chunkText = string.Join("\n\n", ragContext.Chunks
+                .Take(4)
+                .Select(chunk => $"{chunk.Section}\n{chunk.Content}"));
+            return chunkText.Length <= maxChars ? chunkText : chunkText[..maxChars];
+        }
+
+        if (string.IsNullOrWhiteSpace(extractionText))
+        {
+            return string.Empty;
+        }
+
+        var trimmed = extractionText.Trim();
+        return trimmed.Length <= maxChars ? trimmed : trimmed[..maxChars];
+    }
+
     public static string EnsureFigurePlaceholders(string summary, IReadOnlyList<ImagePrompt> prompts)
     {
         if (string.IsNullOrWhiteSpace(summary) || prompts.Count == 0)
@@ -278,7 +406,7 @@ static class SummaryPostProcessor
                 continue;
             }
 
-            var heading = prompt.Placement?.Trim();
+            var heading = NormalizePlacement(prompt.Placement);
             if (!string.IsNullOrWhiteSpace(heading))
             {
                 output = InsertPlaceholderAfterHeading(output, heading, placeholder);
@@ -326,7 +454,9 @@ static class SummaryPostProcessor
                 || line.StartsWith("### ", StringComparison.OrdinalIgnoreCase))
             {
                 var lineHeading = line.TrimStart('#', ' ').Trim();
-                if (lineHeading.Equals(headingText, StringComparison.OrdinalIgnoreCase))
+                if (lineHeading.Equals(headingText, StringComparison.OrdinalIgnoreCase)
+                    || lineHeading.Contains(headingText, StringComparison.OrdinalIgnoreCase)
+                    || headingText.Contains(lineHeading, StringComparison.OrdinalIgnoreCase))
                 {
                     lines.Insert(i + 1, placeholder);
                     return string.Join('\n', lines);
@@ -335,6 +465,39 @@ static class SummaryPostProcessor
         }
 
         return $"{summary}\n\n{placeholder}";
+    }
+
+    private static string? NormalizePlacement(string? placement)
+    {
+        if (string.IsNullOrWhiteSpace(placement))
+        {
+            return null;
+        }
+
+        var normalized = placement.Trim();
+        var lower = normalized.ToLowerInvariant();
+
+        if (lower.Contains("adverse") || lower.Contains("safety") || lower.Contains("side effect"))
+        {
+            return "What side effects or safety findings were reported?";
+        }
+
+        if (lower.Contains("result") || lower.Contains("outcome"))
+        {
+            return "What were the main results?";
+        }
+
+        if (lower.Contains("method") || lower.Contains("design") || lower.Contains("how was"))
+        {
+            return "How was the study done?";
+        }
+
+        if (lower.Contains("summary") || lower.Contains("overview") || lower.Contains("about"))
+        {
+            return "What is this summary about?";
+        }
+
+        return normalized;
     }
 
     public static string NormalizeImageMarkdown(string summary)

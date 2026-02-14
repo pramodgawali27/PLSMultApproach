@@ -93,6 +93,7 @@ jobs:
                 Storage__Blob__ConnectionString="${{ secrets.STORAGE_BLOB_CONNECTION }}" \
                 Storage__Blob__Container="${{ secrets.STORAGE_BLOB_CONTAINER }}" \
                 ConnectionStrings__Postgres="${{ secrets.POSTGRES_CONN }}" \
+                DOCLING_URL="${{ secrets.DOCLING_URL }}" \
                 RAG_VECTORSTORE=azure \
                 RAG_EMBEDDINGS=azure \
                 AZURE_SEARCH_ENDPOINT="${{ secrets.AZURE_SEARCH_ENDPOINT }}" \
@@ -122,6 +123,7 @@ jobs:
                 Storage__Blob__ConnectionString="${{ secrets.STORAGE_BLOB_CONNECTION }}" \
                 Storage__Blob__Container="${{ secrets.STORAGE_BLOB_CONTAINER }}" \
                 ConnectionStrings__Postgres="${{ secrets.POSTGRES_CONN }}" \
+                DOCLING_URL="${{ secrets.DOCLING_URL }}" \
                 RAG_VECTORSTORE=azure \
                 RAG_EMBEDDINGS=azure \
                 AZURE_SEARCH_ENDPOINT="${{ secrets.AZURE_SEARCH_ENDPOINT }}" \

@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import {
   fetchEntitlements,
   fetchPromptTemplate,
-  generateSummary,
   SummaryLane,
   uploadDocument
 } from "../api";
@@ -21,8 +20,10 @@ export default function Home() {
   const [therapeuticArea, setTherapeuticArea] = useState("");
   const [audience, setAudience] = useState("Patients");
   const [includeImages, setIncludeImages] = useState(true);
-  const [outputFormat, setOutputFormat] = useState<"HTML" | "PDF">("HTML");
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pendingMessage, setPendingMessage] = useState<string | null>(null);
+  const [jobStartedAt, setJobStartedAt] = useState<number | null>(null);
 
   const { data: entitlements, isLoading: loadingEntitlements } = useQuery({
     queryKey: ["entitlements"],
@@ -32,6 +33,7 @@ export default function Home() {
   const { data: jobData } = useJobPolling(jobId ?? undefined);
   const jobStatus = jobData?.status ?? "Queued";
   const jobError = jobData?.errorMessage ?? null;
+  const jobElapsedMinutes = jobStartedAt ? (Date.now() - jobStartedAt) / 60000 : 0;
 
   const allowedLanes = useMemo(
     () => new Set(entitlements?.enabledLanes ?? []),
@@ -47,16 +49,21 @@ export default function Home() {
     }
 
     try {
+      setIsSubmitting(true);
+      setPendingMessage("Submitting your document. Starting the summary job...");
       setError(null);
       const uploadResult = await uploadDocument(file, selectedLane, promptOverride ?? undefined, {
         title: title || undefined,
         therapeuticArea: therapeuticArea || undefined,
         audience: audience as "Patients" | "General public" | "Healthcare professionals"
       });
-      const generateResult = await generateSummary(uploadResult.documentId, selectedLane);
-      setJobId(generateResult.jobId);
+      setJobId(uploadResult.jobId);
+      setJobStartedAt(Date.now());
+      setPendingMessage(null);
     } catch (err) {
       setError("Upload or generation failed.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -97,6 +104,13 @@ export default function Home() {
       description: "Agentic multi-step orchestration",
       bestFor: "Premium workflows",
       badges: ["Premium", "Diagrams"]
+    },
+    {
+      lane: "LaneE" as SummaryLane,
+      title: "Lane E",
+      description: "Batch processing for large portfolios",
+      bestFor: "High-volume runs",
+      badges: ["Batch", "Automation"]
     }
   ];
 
@@ -105,7 +119,8 @@ export default function Home() {
     LaneA: "Low cost · Fast turnaround",
     LaneB: "Medium cost · Consistent tone",
     LaneC: "Higher cost · Evidence-based",
-    LaneD: "Premium · Multi-step + diagrams"
+    LaneD: "Premium · Multi-step + diagrams",
+    LaneE: "Enterprise · Batch throughput"
   };
   const laneTips: Record<SummaryLane, string[]> = {
     LaneA: [
@@ -123,8 +138,51 @@ export default function Home() {
     LaneD: [
       "Use for compliance-heavy workflows.",
       "Expect longer processing times."
+    ],
+    LaneE: [
+      "Best for bulk document sets and automated reviews.",
+      "Designed for high-volume tenant pipelines."
     ]
   };
+
+  const stages = [
+    {
+      key: "upload",
+      label: "Upload document",
+      state: isSubmitting ? "active" : jobId ? "done" : "pending"
+    },
+    {
+      key: "index",
+      label: selectedLane === "LaneC" ? "Index & retrieve context" : "Prepare summary input",
+      state: jobId
+        ? jobStatus === "Queued"
+          ? "active"
+          : jobStatus === "Processing" || jobStatus === "Completed"
+            ? "done"
+            : "pending"
+        : "pending"
+    },
+    {
+      key: "summarize",
+      label: "Generate summary",
+      state: jobStatus === "Processing"
+        ? "active"
+        : jobStatus === "Completed"
+          ? "done"
+          : jobStatus === "Failed"
+            ? "failed"
+            : "pending"
+    },
+    {
+      key: "finalize",
+      label: "Finalize & save",
+      state: jobStatus === "Completed"
+        ? "done"
+        : jobStatus === "Failed"
+          ? "failed"
+          : "pending"
+    }
+  ];
 
   return (
     <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
@@ -203,17 +261,6 @@ export default function Home() {
               disabled={!features.images}
             />
           </label>
-          <label className="flex items-center justify-between rounded-xl border border-sand bg-white/70 px-3 py-3 text-sm">
-            Output format
-            <select
-              className="rounded-lg border border-clay bg-white px-2 py-1 text-xs"
-              value={outputFormat}
-              onChange={(event) => setOutputFormat(event.target.value as "HTML" | "PDF")}
-            >
-              <option value="HTML">HTML</option>
-              <option value="PDF">PDF</option>
-            </select>
-          </label>
         </div>
 
         <div className="mt-6">
@@ -248,20 +295,23 @@ export default function Home() {
 
         <div className="mt-6 flex flex-wrap gap-3">
           <button
-            className="rounded-full bg-ink px-6 py-3 text-sm font-semibold text-fog"
+            className="rounded-full bg-ink px-6 py-3 text-sm font-semibold text-fog disabled:cursor-not-allowed disabled:opacity-60"
             onClick={handleUpload}
-            disabled={!file}
+            disabled={!file || isSubmitting}
           >
-            Generate summary
+            {isSubmitting ? "Starting..." : "Generate summary"}
           </button>
           <button className="rounded-full border border-sand px-6 py-3 text-sm font-semibold" type="button">
             Save as draft
           </button>
         </div>
+        {pendingMessage && (
+          <p className="mt-3 text-xs text-slate-500">{pendingMessage}</p>
+        )}
       </section>
 
       <section className="glass-panel rounded-3xl p-6 lg:sticky lg:top-8 self-start">
-        {jobId ? (
+        {jobId || isSubmitting ? (
           <>
             <h2 className="font-display text-2xl font-semibold">Job status</h2>
             <p className="mt-2 text-sm text-slate-600">Live status updates for your latest job.</p>
@@ -269,13 +319,43 @@ export default function Home() {
             <div className="mt-6 space-y-3 rounded-2xl bg-white/70 p-4 text-sm">
               <div className="flex items-center justify-between">
                 <span className="text-xs uppercase tracking-wide text-slate-500">Current job</span>
-                <span className="text-xs font-semibold break-all text-right">{jobId}</span>
+                <span className="text-xs font-semibold break-all text-right">
+                  {jobId ?? "Pending..."}
+                </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-600">Status</span>
-                <StatusBadge status={jobStatus} />
+                <StatusBadge status={jobId ? jobStatus : "Queued"} />
               </div>
+              {pendingMessage && <p className="text-xs text-slate-500">{pendingMessage}</p>}
               {jobError && <p className="text-xs text-ember">Failed. {jobError}</p>}
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-sand bg-white/70 p-4 text-sm">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Progress</p>
+              <div className="mt-3 space-y-2">
+                {stages.map((stage) => (
+                  <div key={stage.key} className="flex items-center gap-3">
+                    <span
+                      className={`h-2.5 w-2.5 rounded-full ${
+                        stage.state === "done"
+                          ? "bg-moss"
+                          : stage.state === "active"
+                            ? "bg-ember"
+                            : stage.state === "failed"
+                              ? "bg-ink"
+                              : "bg-slate-300"
+                      }`}
+                    />
+                    <span className="text-slate-700">{stage.label}</span>
+                  </div>
+                ))}
+              </div>
+              {jobElapsedMinutes > 2 && (jobStatus === "Queued" || jobStatus === "Processing") && (
+                <p className="mt-3 text-xs text-ember">
+                  This step is taking longer than usual. Check service logs for stuck jobs.
+                </p>
+              )}
             </div>
 
             {jobData?.summaryId && jobData.status === "Completed" && (

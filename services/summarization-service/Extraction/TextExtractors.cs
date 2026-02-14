@@ -56,6 +56,22 @@ public sealed class HybridTextExtractor : ITextExtractor
             return await _fallback.ExtractAsync(documentId, storageUri, contentType);
         }
 
+        Result<ExtractionResult>? fallbackResult = null;
+        var ocrOnly = _configuration.GetValue("DOCLING_OCR_ONLY", true);
+        if (ocrOnly && contentType.Contains("pdf", StringComparison.OrdinalIgnoreCase))
+        {
+            fallbackResult = await _fallback.ExtractAsync(documentId, storageUri, contentType);
+            if (fallbackResult.IsSuccess && fallbackResult.Value is not null)
+            {
+                var minChars = _configuration.GetValue("DOCLING_TEXT_THRESHOLD", 500);
+                if (fallbackResult.Value.Text.Trim().Length >= minChars)
+                {
+                    _logger.LogInformation("Skipping Docling OCR; extracted {CharCount} characters via built-in PDF parser.", fallbackResult.Value.Text.Trim().Length);
+                    return fallbackResult;
+                }
+            }
+        }
+
         var doclingResult = await _docling.ExtractAsync(documentId, storageUri, contentType);
         if (doclingResult.IsSuccess && doclingResult.Value is not null && !string.IsNullOrWhiteSpace(doclingResult.Value.Text))
         {
@@ -63,7 +79,7 @@ public sealed class HybridTextExtractor : ITextExtractor
         }
 
         _logger.LogWarning("Docling extraction failed; falling back to built-in extractor. Error: {Error}", doclingResult.Error);
-        return await _fallback.ExtractAsync(documentId, storageUri, contentType);
+        return fallbackResult ?? await _fallback.ExtractAsync(documentId, storageUri, contentType);
     }
 }
 
@@ -159,13 +175,24 @@ public sealed class CompositeTextExtractor : ITextExtractor
 
         if (contentType.Contains("pdf", StringComparison.OrdinalIgnoreCase))
         {
-            using var document = PdfDocument.Open(localPath);
-            var text = new StringBuilder();
-            foreach (var page in document.GetPages())
+            try
             {
-                text.AppendLine(page.Text);
+                using var document = PdfDocument.Open(localPath);
+                var text = new StringBuilder();
+                foreach (var page in document.GetPages())
+                {
+                    text.AppendLine(page.Text);
+                }
+                return Result<ExtractionResult>.Ok(new ExtractionResult(text.ToString(), Array.Empty<ExtractedImage>(), "local"));
             }
-            return Result<ExtractionResult>.Ok(new ExtractionResult(text.ToString(), Array.Empty<ExtractedImage>(), "local"));
+            catch (UglyToad.PdfPig.Core.PdfDocumentFormatException ex)
+            {
+                return Result<ExtractionResult>.Fail($"PDF parse error: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                return Result<ExtractionResult>.Fail($"PDF extraction failed: {ex.Message}");
+            }
         }
 
         if (contentType.Contains("word", StringComparison.OrdinalIgnoreCase) || storageUri.EndsWith(".docx", StringComparison.OrdinalIgnoreCase))

@@ -42,6 +42,29 @@ export default function SummaryDetail() {
           <div>
             <p className="text-xs uppercase tracking-wide text-slate-500">Summary detail</p>
             <h2 className="font-display text-2xl font-semibold">{data.title ?? "Plain Language Summary"}</h2>
+            <div className="mt-4 rounded-2xl border border-sand bg-white/70 p-4 text-sm text-slate-700">
+              <div className="grid gap-2 md:grid-cols-2">
+                <p>
+                  <span className="font-semibold text-slate-800">Document:</span>{" "}
+                  {data.title ?? "Plain Language Summary"}
+                </p>
+                <p>
+                  <span className="font-semibold text-slate-800">Therapeutic area:</span>{" "}
+                  {data.therapeuticArea ?? "-"}
+                </p>
+                <p>
+                  <span className="font-semibold text-slate-800">Audience:</span>{" "}
+                  {data.audience ?? "-"}
+                </p>
+                <p>
+                  <span className="font-semibold text-slate-800">Generated:</span>{" "}
+                  {new Date(data.createdAt).toLocaleString()}
+                </p>
+                <p>
+                  <span className="font-semibold text-slate-800">Lane:</span> {data.lane}
+                </p>
+              </div>
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={data.status ?? "Completed"} />

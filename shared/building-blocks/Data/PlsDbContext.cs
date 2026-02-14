@@ -17,6 +17,8 @@ public sealed class PlsDbContext : DbContext
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<DocumentChunk> DocumentChunks => Set<DocumentChunk>();
     public DbSet<RetrievalRun> RetrievalRuns => Set<RetrievalRun>();
+    public DbSet<ProviderConfig> ProviderConfigs => Set<ProviderConfig>();
+    public DbSet<LaneRecipe> LaneRecipes => Set<LaneRecipe>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -29,6 +31,8 @@ public sealed class PlsDbContext : DbContext
         modelBuilder.Entity<AuditLog>().HasKey(x => x.Id);
         modelBuilder.Entity<DocumentChunk>().HasKey(x => x.Id);
         modelBuilder.Entity<RetrievalRun>().HasKey(x => x.Id);
+        modelBuilder.Entity<ProviderConfig>().HasKey(x => x.Id);
+        modelBuilder.Entity<LaneRecipe>().HasKey(x => x.Id);
 
         modelBuilder.Entity<User>()
             .HasIndex(x => new { x.TenantId, x.ExternalId })
@@ -51,5 +55,11 @@ public sealed class PlsDbContext : DbContext
 
         modelBuilder.Entity<RetrievalRun>()
             .HasIndex(x => new { x.TenantId, x.DocumentId });
+
+        modelBuilder.Entity<ProviderConfig>()
+            .HasIndex(x => new { x.TenantId, x.ProviderType });
+
+        modelBuilder.Entity<LaneRecipe>()
+            .HasIndex(x => new { x.TenantId, x.LaneType });
     }
 }

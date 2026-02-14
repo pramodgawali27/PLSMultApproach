@@ -12,4 +12,10 @@ public static class ClaimsExtensions
 
     public static Guid GetUserId(this ClaimsPrincipal principal)
         => Guid.Parse(principal.FindFirstValue(UserIdClaim) ?? throw new InvalidOperationException("Missing user_id claim."));
+
+    public static string GetRole(this ClaimsPrincipal principal)
+        => principal.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+
+    public static bool HasRole(this ClaimsPrincipal principal, string role)
+        => string.Equals(principal.GetRole(), role, StringComparison.OrdinalIgnoreCase);
 }

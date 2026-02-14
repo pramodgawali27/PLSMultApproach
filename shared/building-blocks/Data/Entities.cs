@@ -17,6 +17,7 @@ public sealed class User
     public string ExternalId { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
+    public UserRole Role { get; set; } = UserRole.ProjectUser;
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
@@ -40,6 +41,9 @@ public sealed class Document
     public string ContentType { get; set; } = string.Empty;
     public long SizeBytes { get; set; }
     public string StorageUri { get; set; } = string.Empty;
+    public string? Title { get; set; }
+    public string? TherapeuticArea { get; set; }
+    public string? Audience { get; set; }
     public DateTimeOffset UploadedAt { get; set; } = DateTimeOffset.UtcNow;
     public DocumentStatus Status { get; set; } = DocumentStatus.Uploaded;
 }
@@ -107,4 +111,38 @@ public sealed class AuditLog
     public string EntityId { get; set; } = string.Empty;
     public DateTimeOffset Timestamp { get; set; } = DateTimeOffset.UtcNow;
     public string? MetadataJson { get; set; }
+}
+
+public sealed class ProviderConfig
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public ProviderType ProviderType { get; set; }
+    public AuthMode AuthMode { get; set; } = AuthMode.ApiKey;
+    public string? Endpoint { get; set; }
+    public string? DeploymentName { get; set; }
+    public string? EmbeddingDeploymentName { get; set; }
+    public string? ImageDeploymentName { get; set; }
+    public string? IndexName { get; set; }
+    public string? AccountName { get; set; }
+    public string? ContainerName { get; set; }
+    public string? SecretRefId { get; set; }
+    public string? PublicAccessMode { get; set; }
+    public bool UseSasLinks { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+public sealed class LaneRecipe
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public SummaryLane LaneType { get; set; }
+    public bool IsEnabled { get; set; } = true;
+    public string ProviderRefsJson { get; set; } = "{}";
+    public string LaneSettingsJson { get; set; } = "{}";
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

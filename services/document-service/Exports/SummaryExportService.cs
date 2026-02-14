@@ -28,10 +28,11 @@ public sealed class SummaryExportService
             container.Page(page =>
             {
                 page.Margin(32);
-                page.DefaultTextStyle(style => style.FontFamily("DejaVu Sans").FontSize(12).FontColor("#1F2937"));
+                page.DefaultTextStyle(style => style.FontFamily("DejaVu Sans").FontSize(13).FontColor("#1F2937"));
                 page.Header().Element(header => BuildPdfHeader(header, data));
                 page.Content().Column(column =>
                 {
+                    column.Item().Element(meta => BuildPdfMetadata(meta, data));
                     var remainingImages = images.ToList();
                     foreach (var (section, index) in sections.Select((section, index) => (section, index)))
                     {
@@ -76,6 +77,10 @@ public sealed class SummaryExportService
 
         var body = mainPart.Document.Body ?? new Body();
         body.Append(BuildDocxSummaryHeader());
+        foreach (var line in BuildDocxMetadata(data))
+        {
+            body.Append(line);
+        }
         body.Append(BuildDocxSummary(data));
         body.Append(sectionProperties);
         mainPart.Document.Body = body;
@@ -168,13 +173,69 @@ public sealed class SummaryExportService
         return new Paragraph(run);
     }
 
+    private static IEnumerable<Paragraph> BuildDocxMetadata(SummaryExportData data)
+    {
+        var lines = new List<string>
+        {
+            $"Title: {data.DisplayTitle}",
+            $"Therapeutic area: {data.TherapeuticArea ?? "-"}",
+            $"Audience: {data.Audience ?? "-"}",
+            $"Generated: {data.GeneratedAt:yyyy-MM-dd HH:mm} UTC",
+            $"Lane: {data.LaneLabel}"
+        };
+
+        foreach (var line in lines)
+        {
+            yield return new Paragraph(new Run(new Text(line)));
+        }
+    }
+
+    private static void BuildPdfMetadata(IContainer container, SummaryExportData data)
+    {
+        container.PaddingVertical(10).PaddingHorizontal(4).Column(col =>
+        {
+            col.Item().Text("Document details").FontSize(10).FontColor("#64748B").SemiBold();
+            col.Item().PaddingTop(6).Background("#FFFFFF").Border(1).BorderColor("#D5DDE8").Padding(10).Column(meta =>
+            {
+                meta.Spacing(3);
+                meta.Item().Text(text =>
+                {
+                    text.Span("Title: ").SemiBold();
+                    text.Span(data.DisplayTitle);
+                });
+                meta.Item().Text(text =>
+                {
+                    text.Span("Therapeutic area: ").SemiBold();
+                    text.Span(data.TherapeuticArea ?? "-");
+                });
+                meta.Item().Text(text =>
+                {
+                    text.Span("Audience: ").SemiBold();
+                    text.Span(data.Audience ?? "-");
+                });
+                meta.Item().Text(text =>
+                {
+                    text.Span("Generated: ").SemiBold();
+                    text.Span($"{data.GeneratedAt:yyyy-MM-dd HH:mm} UTC");
+                });
+                meta.Item().Text(text =>
+                {
+                    text.Span("Lane: ").SemiBold();
+                    text.Span(data.LaneLabel);
+                });
+            });
+        });
+    }
+
     private static string NormalizeSummaryText(string text)
         => Regex.Replace(
             text.Replace("\r", string.Empty, StringComparison.Ordinal),
             @"\[(?<label>[^\]]+)\]\([^)]+\)",
             "[$1]")
             .Replace(@"\[", "[", StringComparison.Ordinal)
-            .Replace(@"\]", "]", StringComparison.Ordinal);
+            .Replace(@"\]", "]", StringComparison.Ordinal)
+            .Replace("[[", "[", StringComparison.Ordinal)
+            .Replace("]]", "]", StringComparison.Ordinal);
 
     private static string StripBoldMarkers(string text)
         => text.Replace("**", string.Empty, StringComparison.Ordinal);
@@ -229,10 +290,11 @@ public sealed class SummaryExportService
     {
         container.PaddingVertical(6).PaddingHorizontal(2).Background(style.Background).Border(1).BorderColor("#D5DDE8").Padding(14).Column(col =>
         {
-            col.Item().Background(style.AccentColor).PaddingVertical(6).PaddingHorizontal(10)
-                .Text(section.Title).FontSize(12).SemiBold().FontColor("#FFFFFF");
-            col.Item().PaddingTop(6).Column(bodyCol =>
+            col.Item().Background(style.AccentColor).PaddingVertical(7).PaddingHorizontal(12)
+                .Text(section.Title).FontSize(13).SemiBold().FontColor("#FFFFFF");
+            col.Item().PaddingTop(8).Column(bodyCol =>
             {
+                bodyCol.Spacing(4);
                 var lines = section.Body.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
                 foreach (var line in lines)
                 {
@@ -243,7 +305,7 @@ public sealed class SummaryExportService
 
                     bodyCol.Item().Text(text =>
                     {
-                        text.DefaultTextStyle(style => style.FontSize(12).LineHeight(1.5f).FontColor("#1F2937"));
+                        text.DefaultTextStyle(style => style.FontSize(13).LineHeight(1.65f).FontColor("#1F2937"));
                         foreach (var segment in ParseBoldSegments(line))
                         {
                             var span = text.Span(segment.Text);
@@ -372,11 +434,15 @@ public sealed class SummaryExportService
 
 public sealed record SummaryExportData(
     string DocumentName,
+    string? Title,
+    string? TherapeuticArea,
+    string? Audience,
     SummaryLane Lane,
     string SummaryText,
     DateTimeOffset GeneratedAt)
 {
     public string LaneLabel => Lane.ToString();
+    public string DisplayTitle => string.IsNullOrWhiteSpace(Title) ? DocumentName : Title!;
 }
 
 public sealed class SummarySection
