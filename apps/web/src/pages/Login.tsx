@@ -6,8 +6,8 @@ import { useAuth } from "../components/AuthProvider";
 export default function Login() {
   const { setToken } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("demo@pls.local");
-  const [tenantName, setTenantName] = useState("Demo Tenant");
+  const [email, setEmail] = useState("");
+  const [tenantName, setTenantName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -42,6 +42,7 @@ export default function Login() {
               className="rounded-xl border border-clay bg-white/70 px-4 py-2"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
+              placeholder="you@company.com"
               type="email"
               required
             />
@@ -52,6 +53,7 @@ export default function Login() {
               className="rounded-xl border border-clay bg-white/70 px-4 py-2"
               value={tenantName}
               onChange={(event) => setTenantName(event.target.value)}
+              placeholder="Tenant name"
               required
             />
           </label>

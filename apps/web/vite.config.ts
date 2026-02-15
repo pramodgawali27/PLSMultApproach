@@ -7,7 +7,8 @@ export default defineConfig({
   server: {
     port: 5173,
     allowedHosts: [
-      'pls-web.happydune-0689c206.eastus.azurecontainerapps.io'
+      'pls-web.happydune-0689c206.eastus.azurecontainerapps.io',
+      'summary.plsplatform.com'
     ]
   }
 });
