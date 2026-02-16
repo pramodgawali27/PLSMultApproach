@@ -46,22 +46,24 @@ jobs:
         run: |
           echo "${{ secrets.ACR_PASSWORD }}" | docker login "${{ secrets.ACR_LOGIN_SERVER }}" -u "${{ secrets.ACR_USERNAME }}" --password-stdin
 
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          sudo docker system prune -af
+          df -h
+
       - name: Build & Push images
         run: |
           docker build -t "${{ secrets.ACR_LOGIN_SERVER }}/pls-document-service:${IMAGE_TAG}" -f services/document-service/Dockerfile .
           docker build -t "${{ secrets.ACR_LOGIN_SERVER }}/pls-orchestrator-service:${IMAGE_TAG}" -f services/orchestrator-service/Dockerfile .
           docker build -t "${{ secrets.ACR_LOGIN_SERVER }}/pls-summarization-service:${IMAGE_TAG}" -f services/summarization-service/Dockerfile .
+          docker build -t "${{ secrets.ACR_LOGIN_SERVER }}/pls-dockling-service:${IMAGE_TAG}" -f services/docling-service/Dockerfile .
           docker build -t "${{ secrets.ACR_LOGIN_SERVER }}/pls-web:${IMAGE_TAG}" -f apps/web/Dockerfile .
           docker push "${{ secrets.ACR_LOGIN_SERVER }}/pls-document-service:${IMAGE_TAG}"
           docker push "${{ secrets.ACR_LOGIN_SERVER }}/pls-orchestrator-service:${IMAGE_TAG}"
           docker push "${{ secrets.ACR_LOGIN_SERVER }}/pls-summarization-service:${IMAGE_TAG}"
+          docker push "${{ secrets.ACR_LOGIN_SERVER }}/pls-dockling-service:${IMAGE_TAG}"
           docker push "${{ secrets.ACR_LOGIN_SERVER }}/pls-web:${IMAGE_TAG}"
-
-      - name: Build & Push Docling image via ACR
-        run: |
-          az acr build -r "$ACR_NAME" \
-            -t "${{ secrets.ACR_LOGIN_SERVER }}/pls-dockling-service:${IMAGE_TAG}" \
-            -f services/docling-service/Dockerfile .
 
       # 0) Deploy Docling (internal)
       - name: Deploy/Update Docling Service (internal)

@@ -8,7 +8,13 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY services/docling-service/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install CPU-only PyTorch to avoid pulling NVIDIA CUDA libraries.
+RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch torchvision torchaudio \
+    && pip install --no-cache-dir -r requirements.txt
+
+RUN apt-get purge -y build-essential \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY services/docling-service/app.py .
 
