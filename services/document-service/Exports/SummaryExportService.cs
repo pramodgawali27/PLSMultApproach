@@ -34,7 +34,11 @@ public sealed class SummaryExportService
                 page.Content().Column(column =>
                 {
                     column.Item().Element(meta => BuildPdfMetadata(meta, data));
-                    var remainingImages = images.ToList();
+                    // Pre-assign numbered citations [1], [2]... replacing raw visual IDs
+                    var numberedImages = images
+                        .Select((img, i) => img with { Caption = $"[{i + 1}]" })
+                        .ToList();
+                    var remainingImages = numberedImages.ToList();
                     foreach (var (section, index) in sections.Select((section, index) => (section, index)))
                     {
                         var style = palette[index % palette.Length];
@@ -309,13 +313,20 @@ public sealed class SummaryExportService
                         continue;
                     }
 
-                    // Bullet points
-                    var isBullet = line.TrimStart().StartsWith("- ", StringComparison.Ordinal)
-                                || line.TrimStart().StartsWith("• ", StringComparison.Ordinal)
-                                || line.TrimStart().StartsWith("* ", StringComparison.Ordinal);
+                    // Strip blockquote markers (> and >> etc.)
+                    var stripped = line.TrimStart();
+                    while (stripped.StartsWith("> ", StringComparison.Ordinal))
+                        stripped = stripped.Substring(2).TrimStart();
+                    if (stripped.StartsWith(">", StringComparison.Ordinal) && stripped.Length > 1)
+                        stripped = stripped.Substring(1).TrimStart();
+
+                    // Bullet points — use Substring(2) to preserve any ** bold markers after the bullet prefix
+                    var isBullet = stripped.StartsWith("- ", StringComparison.Ordinal)
+                                || stripped.StartsWith("• ", StringComparison.Ordinal)
+                                || stripped.StartsWith("* ", StringComparison.Ordinal);
                     var lineText = isBullet
-                        ? "• " + line.TrimStart().TrimStart('-', '•', '*', ' ')
-                        : line;
+                        ? "• " + stripped.Substring(2)
+                        : stripped;
 
                     bodyCol.Item().Text(text =>
                     {
@@ -342,7 +353,15 @@ public sealed class SummaryExportService
                         imageCol.Item().Background("#FFFFFF").Border(2).BorderColor("#47b5a0").Padding(6)
                             .Column(img =>
                             {
-                                img.Item().AlignCenter().Image(image.Content).FitWidth();
+                                if (image.ContentType.Contains("svg", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    var svgXml = System.Text.Encoding.UTF8.GetString(image.Content);
+                                    img.Item().Svg(svgXml).FitWidth();
+                                }
+                                else
+                                {
+                                    img.Item().Image(image.Content).FitWidth();
+                                }
                                 if (!string.IsNullOrWhiteSpace(image.Caption))
                                 {
                                     img.Item().PaddingTop(4).AlignCenter()
