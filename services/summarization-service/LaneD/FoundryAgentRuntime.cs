@@ -47,16 +47,44 @@ public sealed class FoundryAgentRuntime : ILaneDAgentRuntime
 
     public async Task<AgentResponse> RunAsync(AgentRequest request, CancellationToken cancellationToken)
     {
+        // Retry up to 3 times for transient network errors (ResponseEnded, ServiceUnavailable, etc.)
+        const int MaxAttempts = 3;
+        var delay = TimeSpan.FromSeconds(3);
+
+        for (var attempt = 1; attempt <= MaxAttempts; attempt++)
+        {
+            try
+            {
+                return await CallOnceAsync(request, cancellationToken);
+            }
+            catch (HttpRequestException ex) when (attempt < MaxAttempts && IsTransient(ex))
+            {
+                _logger.LogWarning(
+                    "[LaneD/Foundry] Agent={Agent} attempt {Attempt}/{Max} failed ({Msg}). Retrying in {Delay}s…",
+                    request.AgentName, attempt, MaxAttempts, ex.Message, delay.TotalSeconds);
+                await Task.Delay(delay, cancellationToken);
+                delay = TimeSpan.FromSeconds(delay.TotalSeconds * 2); // exponential back-off
+            }
+        }
+
+        // Final attempt — let any exception propagate
+        return await CallOnceAsync(request, cancellationToken);
+    }
+
+    private async Task<AgentResponse> CallOnceAsync(AgentRequest request, CancellationToken cancellationToken)
+    {
         SetAuthHeader();
 
         var endpoint = BaseEndpoint.TrimEnd('/');
 
-        // OpenAI Responses API — single call, no polling required
-        // Confirmed working: base endpoint + gpt-4o + api-version=2025-03-01-preview → HTTP 200
+        // OpenAI Responses API — single synchronous call, no polling required.
+        // Confirmed working: base endpoint + gpt-4o + api-version=2025-03-01-preview → HTTP 200.
+        // NOTE: PLS-Agent:2 (named Foundry agent) requires project-endpoint + Azure AD Bearer auth,
+        // which needs AZURE_CLIENT_ID configured. Until then, gpt-4o via base endpoint is used.
         var requestBody = new
         {
-            model = ModelDeployment,
-            input = new[]
+            model             = ModelDeployment,
+            input             = new[]
             {
                 new { role = "system", content = request.SystemPrompt },
                 new { role = "user",   content = request.UserPrompt   }
@@ -98,6 +126,20 @@ public sealed class FoundryAgentRuntime : ILaneDAgentRuntime
             ?? string.Empty;
 
         return new AgentResponse(text, 0, request.AgentName);
+    }
+
+    /// <summary>Returns true for transient HTTP errors that are safe to retry.</summary>
+    private static bool IsTransient(HttpRequestException ex)
+    {
+        // ResponseEnded / connection reset / premature EOF
+        if (ex.InnerException is System.Net.Http.HttpIOException)
+            return true;
+
+        return ex.StatusCode is
+            System.Net.HttpStatusCode.ServiceUnavailable or
+            System.Net.HttpStatusCode.TooManyRequests   or
+            System.Net.HttpStatusCode.GatewayTimeout    or
+            System.Net.HttpStatusCode.BadGateway;
     }
 
     private void SetAuthHeader()
