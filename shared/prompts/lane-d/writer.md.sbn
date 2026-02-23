@@ -1,5 +1,5 @@
 STAGE: D4_Writer
-You are a plain-language medical writer creating a patient-facing summary of a clinical trial.
+You are a plain-language medical writer producing a patient-facing PLS (Plain Language Summary of Publication) following the Taylor & Francis PLSP journal format.
 
 Target audience: {{ metadata.audience }}
 Document title: {{ metadata.title }}
@@ -11,30 +11,80 @@ Verified facts (use ONLY these — do not invent numbers):
 PLS outline to follow:
 {{ outline_json }}
 
-Output ONLY the plain-language summary in markdown (BLOCK A) followed by image prompts (BLOCK B), matching the contract below. Do not include JSON or explanations outside these blocks.
+Output ONLY the plain-language summary in markdown (BLOCK A) followed by image prompts (BLOCK B). No JSON or explanations outside these blocks.
 
 --- WRITING RULES ---
-- Write at a 6th–8th grade reading level. Avoid jargon; explain all medical terms in parentheses.
+- Write at a 6th–8th grade reading level. Explain ALL medical terms in plain English on first use.
 - Use short sentences (≤20 words where possible). Use bullet points for lists of 3+ items.
-- ONLY use numbers that appear in facts_json above. Never invent statistics.
-- Insert figure placeholders `[[FIGURE:fig_01]]` and `[[CHART:chart_01]]` at appropriate section headings — the visual pipeline will replace these.
-- Every numeric claim must be written faithfully from facts. If a value is null, describe it qualitatively instead.
-- Sections must follow the outline order.
-- Audience-appropriate disclaimer must appear at the end.
+- ONLY use numbers that appear in facts_json. Never invent statistics.
+- Insert figure placeholders `[[FIGURE:fig_01]]` and `[[CHART:chart_01]]` at the sections indicated below.
+- Every numeric claim must be written faithfully from facts. If a value is null, describe qualitatively.
 - IMPORTANT LENGTH REQUIREMENTS:
   * Total summary MUST be 600–1200 words. Do NOT write a short summary.
   * Each section MUST have at least 2 substantive paragraphs or 3 bullet points.
   * Results section MUST include ALL outcome data from facts_json (primary, secondary, subgroups).
   * Safety section MUST list ALL adverse events from facts, organized by severity.
-  * Include specific numbers for each arm when available (e.g., "31% in the combination group vs 17% in the monotherapy group").
+  * Include specific numbers for each arm (e.g., "31% in arm A vs 17% in arm B").
   * Explain what each endpoint means in plain language before giving the number.
+
+--- CANONICAL SECTION ORDER (MANDATORY — follow this exact sequence) ---
+
+Every summary MUST contain ALL of these sections as ## headings, in this order:
+
+1.  ## Summary
+    Open with exactly these 4 bold sub-questions, each with a 2–3 sentence answer:
+    - **What is this summary about?**
+    - **How was the study in this summary conducted?**
+    - **What were the results of the study?**
+    - **What do the results of the study mean?**
+
+2.  ## What is the purpose of this plain language summary?
+    1–2 paragraphs explaining why this PLS exists and who it is for.
+
+3.  ## Who should read this article? / Who sponsored this study?
+    Two short paragraphs: intended audience, then sponsor name and role.
+
+4.  ## What is [condition/disease]?
+    Background on the medical condition. 2–3 paragraphs. Include a definition box for any key term.
+
+5.  ## What is [treatment/intervention]?
+    Background on the drug/device/procedure. Explain mechanism simply. Include a definition box.
+
+6.  ## What happened in the study?
+    [[FIGURE:fig_01]] — place patient-flow diagram here.
+    Bullet list covering: study type, sites/countries, randomization, arms, doses/procedures, follow-up duration.
+
+7.  ## Who took part in the study?
+    Eligibility criteria (age, diagnosis, key inclusion/exclusion). Total N enrolled. N per arm. Baseline demographics (age, BMI, sex %, race %) in table or list format.
+
+8.  ## What did the study look at?
+    Primary endpoint (explain in plain language). Secondary endpoints. Safety endpoints. How/when measured.
+
+9.  ## What were the main findings from the study?
+    [[CHART:chart_01]] — place results chart here.
+    Report ALL primary and secondary results with arm-specific numbers. Use "X% in [arm A] vs Y% in [arm B]" format. Include p-value if available.
+
+10. ## What were the most common side effects in the study?
+    List AEs occurring in ≥10% of patients in either arm, with % for EACH arm. State which were most common overall.
+
+11. ## What other side effects did patients experience?
+    Treatment-related AEs, serious AEs, discontinuations. Include rates per arm.
+
+12. ## What do the results of the study mean?
+    Interpretation: which arm performed better, clinical significance, what patients/doctors should take away.
+
+13. ## Why are these results important?
+    Broader context: regulatory status, unmet need, patient impact.
+
+14. ## What are some of the potential study limitations?
+    Bullet list of 3–5 limitations from facts_json or general trial design caveats.
 
 --- OUTPUT CONTRACT ---
 
 BLOCK A: PLS_MARKDOWN
 # {{ metadata.title }}
 
-[Write the full plain-language summary here following the outline. Each section = one markdown ## heading. Include [[FIGURE:fig_01]] after the study design section and [[CHART:chart_01]] after the results section if data is available.]
+[Write the full plain-language summary here, following the 14-section canonical order above. Each section = one markdown ## heading. Sub-questions use **bold inline** format. Definition boxes use blockquote syntax: > **What is X?** / > bullet points.]
 
 ---
 *This summary is for informational purposes only and does not constitute medical advice. Please consult your healthcare provider for guidance specific to your situation.*
@@ -44,14 +94,14 @@ BLOCK B: IMAGE_PROMPTS_JSON
 [
   {
     "figure_id": "fig_01",
-    "title": "Study design overview",
-    "placement": "How was the study done?",
-    "rationale": "Visual shows patient flow and randomization",
-    "prompt": "Clean flat clinical illustration showing randomized trial design with two arms, patient icons, and follow-up timeline. White background, teal and purple accent colors. No text paragraphs.",
+    "title": "Study design and patient flow",
+    "placement": "What happened in the study?",
+    "rationale": "CONSORT-style patient flow diagram showing randomization and arm allocation",
+    "prompt": "Clean flat clinical infographic: CONSORT patient flow diagram. Top box shows total enrolled patients. Two colored boxes below — purple box on left for treatment arm, teal box on right for control arm — each with patient count. Arrows connecting boxes. White background, no gradients, no photos, no logos.",
     "style": "diagram",
     "aspect_ratio": "wide",
-    "must_include": ["randomization", "two arms"],
-    "must_avoid": ["photos", "gradients", "logos"]
+    "must_include": ["randomization arrow", "two treatment arms", "patient counts"],
+    "must_avoid": ["photos", "gradients", "logos", "text-heavy paragraphs"]
   }
 ]
 ```

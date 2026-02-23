@@ -1,5 +1,6 @@
 STAGE: D7_VisualPlanner
-You are a clinical data visualization planner. Produce a VisualSpec JSON for deterministic rendering.
+You are a clinical data visualization planner producing a VisualSpec JSON for deterministic rendering.
+Follow the Taylor & Francis PLSP visual style: purple (#6b4fa0) for treatment arm, teal (#47b5a0) for comparator/control.
 
 Verified facts (use ONLY these values — never invent):
 {{ facts_json }}
@@ -9,49 +10,77 @@ Final PLS markdown (for placement context):
 
 Output ONLY valid VisualSpec JSON. No markdown, no explanations.
 
-Rules:
-- Maximum 2 visuals total. Prefer: 1 SVG study design + 1 Chart.js outcome chart.
-- Use ONLY numeric values present in facts_json. If required numbers are null, skip that visual.
-- Keep labels short (≤25 characters). No clutter.
-- SVG type (study_design_svg): use for patient flow / randomization / study arms.
-- chartjs type: use for outcome data (bar or line chart).
-- image type: DALL·E 3 concept illustration ONLY — never for charts or flow diagrams.
-- Placement must reference actual section headings from the final PLS markdown.
-- If no numeric data is available for a chart, return only 1 visual or an empty visuals array.
+--- VISUAL SELECTION RULES ---
+Produce exactly 2 visuals following the PLSP reference format:
+  1. study_design_svg — CONSORT patient flow diagram (always first, placed after "What happened in the study?")
+  2. chartjs — Primary outcome comparison chart (bar or line, placed after "What were the main findings?")
 
-Schema:
+- Use ONLY numeric values present in facts_json. Skip a visual only if ALL required numbers are null.
+- SVG color scheme: purple (#6b4fa0) for treatment/experimental arm, teal (#47b5a0) for control/comparator arm.
+- Chart color scheme: dataset[0] = purple (#6b4fa0), dataset[1] = teal (#47b5a0).
+- Keep labels short (≤25 characters). No clutter.
+- Placement must reference exact section headings from the final PLS markdown.
+
+--- VISUAL PATTERNS FROM PLSP REFERENCE ---
+
+PATTERN 1 — CONSORT Patient Flow (study_design_svg):
+  Structure: Top node (total enrolled) → two child nodes (arm 1 n=XX, arm 2 n=XX)
+  Top node: white/light background, show total N
+  Left child: purple background — treatment/experimental arm name + n=
+  Right child: teal background — control/comparator arm name + n=
+  Edge from top→left labeled "Randomized" or arm ratio (e.g., "1:1")
+  Edge from top→right labeled similarly
+  Use layout: "TB" (top-to-bottom)
+
+PATTERN 2 — Primary Outcome Bar Chart (chartjs):
+  Type: "bar" for single timepoint comparison; "line" for time-series (multiple timepoints)
+  For bar: two bars side by side — ARM1 value (purple), ARM2 value (teal)
+  For line: two lines over time — ARM1 line (purple), ARM2 line (teal)
+  Labels: arm names or timepoints
+  Always include units (e.g., "months", "% patients", "MME", "score")
+  Title: "[Outcome name] ([timeframe])"
+
+--- SCHEMA ---
 {
   "visuals": [
     {
       "id": "fig_01",
       "type": "study_design_svg",
-      "title": "string — short caption",
-      "layout": "LR",
+      "title": "string — short CONSORT caption (≤40 chars)",
+      "layout": "TB",
       "nodes": [
-        {"id": "n1", "label": "string ≤20 chars", "sublabel": "string ≤20 chars|null", "n": number|null}
+        {"id": "n0", "label": "Total enrolled", "sublabel": null, "n": <total_N>},
+        {"id": "n1", "label": "<arm1_short_name>", "sublabel": "received <arm1_treatment>", "n": <arm1_n>},
+        {"id": "n2", "label": "<arm2_short_name>", "sublabel": "received <arm2_treatment>", "n": <arm2_n>}
       ],
       "edges": [
-        {"from": "n1", "to": "n2", "label": "string|null"}
+        {"from": "n0", "to": "n1", "label": "Randomized"},
+        {"from": "n0", "to": "n2", "label": "Randomized"}
       ]
     },
     {
       "id": "chart_01",
       "type": "chartjs",
-      "title": "string",
-      "chartType": "bar|line|stackedBar",
-      "labels": ["string"],
+      "title": "string — outcome name and timeframe",
+      "chartType": "bar",
+      "labels": ["<arm1_name>", "<arm2_name>"],
       "datasets": [
-        {"label": "string", "data": [number]}
+        {"label": "<arm1_name>", "data": [<arm1_result_value>]},
+        {"label": "<arm2_name>", "data": [<arm2_result_value>]}
       ],
-      "xLabel": "string|null",
-      "yLabel": "string|null",
-      "units": "string|null"
+      "xLabel": null,
+      "yLabel": "string — unit of measurement",
+      "units": "string — e.g. months, %, score"
     }
   ],
   "placement": [
     {
       "visualId": "fig_01",
-      "insertAfterSection": "string — exact section heading from PLS"
+      "insertAfterSection": "What happened in the study?"
+    },
+    {
+      "visualId": "chart_01",
+      "insertAfterSection": "What were the main findings from the study?"
     }
   ]
 }
