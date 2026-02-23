@@ -137,7 +137,7 @@ app.MapPost("/api/auth/dev-login", async (DevLoginRequest request, PlsDbContext 
             Id = Guid.NewGuid(),
             TenantId = tenant.Id,
             PlanName = "Free",
-            EnabledLanes = (int)(LaneFlags.LaneA | LaneFlags.LaneC),
+            EnabledLanes = (int)(LaneFlags.LaneA | LaneFlags.LaneC | LaneFlags.LaneD),
             TokenQuotaMonthly = 10000,
             ActiveFrom = DateTimeOffset.UtcNow
         };

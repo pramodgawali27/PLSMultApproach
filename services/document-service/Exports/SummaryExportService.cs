@@ -15,12 +15,13 @@ public sealed class SummaryExportService
     public byte[] CreatePdf(SummaryExportData data, IReadOnlyList<SummaryImage> images)
     {
         var sections = ParseSections(data.SummaryText);
+        // PLSP Taylor & Francis color scheme: purple (#6b4fa0) headers, white/light backgrounds
         var palette = new[]
         {
-            new SectionStyle("#E9EEF5", "#0B2D72", "#2BA4E3"),
-            new SectionStyle("#EEF2F7", "#0B2D72", "#2BA4E3"),
-            new SectionStyle("#E9EEF5", "#0B2D72", "#2BA4E3"),
-            new SectionStyle("#EEF2F7", "#0B2D72", "#2BA4E3")
+            new SectionStyle("#FFFFFF", "#6b4fa0", "#6b4fa0"),
+            new SectionStyle("#F9F7FC", "#6b4fa0", "#6b4fa0"),
+            new SectionStyle("#FFFFFF", "#6b4fa0", "#6b4fa0"),
+            new SectionStyle("#F9F7FC", "#6b4fa0", "#6b4fa0")
         };
 
         var document = QDocument.Create(container =>
@@ -91,23 +92,24 @@ public sealed class SummaryExportService
 
     private static void BuildPdfHeader(IContainer container, SummaryExportData data)
     {
+        // PLSP Taylor & Francis header: purple banner with teal PLS badge
         container.Column(col =>
         {
-            col.Item().PaddingBottom(8).Text("Plain Language Summary of Publication")
-                .FontSize(10)
-                .FontColor("#0B2D72");
-            col.Item().Background("#0B2D72").PaddingVertical(14).PaddingHorizontal(16).Row(row =>
+            col.Item().PaddingBottom(6).Text("Plain Language Summary of Publication")
+                .FontSize(9)
+                .FontColor("#6b4fa0");
+            col.Item().Background("#6b4fa0").PaddingVertical(14).PaddingHorizontal(16).Row(row =>
             {
                 row.RelativeItem().Column(text =>
                 {
-                    text.Item().Text(data.DocumentName).FontSize(16).FontColor("#FFFFFF").SemiBold();
-                    text.Item().Text($"Lane {data.LaneLabel.Replace("Lane", string.Empty, StringComparison.OrdinalIgnoreCase)}")
+                    text.Item().Text(data.DocumentName).FontSize(15).FontColor("#FFFFFF").SemiBold();
+                    text.Item().PaddingTop(2).Text($"Plain Language Summary · {data.LaneLabel}")
                         .FontSize(9)
-                        .FontColor("#CFE3FF");
+                        .FontColor("#E8DEFF");
                 });
                 row.ConstantItem(64).AlignRight().AlignMiddle().Element(card =>
                 {
-                    card.Width(56).Height(56).Background("#2BA4E3").Border(2).BorderColor("#FFFFFF")
+                    card.Width(52).Height(52).Background("#47b5a0").Border(2).BorderColor("#FFFFFF")
                         .AlignCenter().AlignMiddle()
                         .Text("PLS").FontColor("#FFFFFF").FontSize(12).SemiBold();
                 });
@@ -194,8 +196,8 @@ public sealed class SummaryExportService
     {
         container.PaddingVertical(10).PaddingHorizontal(4).Column(col =>
         {
-            col.Item().Text("Document details").FontSize(10).FontColor("#64748B").SemiBold();
-            col.Item().PaddingTop(6).Background("#FFFFFF").Border(1).BorderColor("#D5DDE8").Padding(10).Column(meta =>
+            col.Item().Text("Document details").FontSize(10).FontColor("#6b4fa0").SemiBold();
+            col.Item().PaddingTop(6).Background("#FFFFFF").Border(1).BorderColor("#d1c4e9").Padding(10).Column(meta =>
             {
                 meta.Spacing(3);
                 meta.Item().Text(text =>
@@ -288,13 +290,17 @@ public sealed class SummaryExportService
         SectionStyle style,
         IReadOnlyList<SummaryImage> images)
     {
-        container.PaddingVertical(6).PaddingHorizontal(2).Background(style.Background).Border(1).BorderColor("#D5DDE8").Padding(14).Column(col =>
+        // PLSP layout: purple section header, clean white/near-white body, teal image border
+        container.PaddingVertical(5).PaddingHorizontal(2).Background(style.Background)
+            .Border(1).BorderColor("#e5e7eb").Column(col =>
         {
-            col.Item().Background(style.AccentColor).PaddingVertical(7).PaddingHorizontal(12)
-                .Text(section.Title).FontSize(13).SemiBold().FontColor("#FFFFFF");
-            col.Item().PaddingTop(8).Column(bodyCol =>
+            // Purple section header bar
+            col.Item().Background(style.AccentColor).PaddingVertical(8).PaddingHorizontal(14)
+                .Text(section.Title).FontSize(12).SemiBold().FontColor("#FFFFFF");
+
+            col.Item().PaddingHorizontal(14).PaddingVertical(8).Column(bodyCol =>
             {
-                bodyCol.Spacing(4);
+                bodyCol.Spacing(5);
                 var lines = section.Body.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
                 foreach (var line in lines)
                 {
@@ -303,33 +309,44 @@ public sealed class SummaryExportService
                         continue;
                     }
 
+                    // Bullet points
+                    var isBullet = line.TrimStart().StartsWith("- ", StringComparison.Ordinal)
+                                || line.TrimStart().StartsWith("• ", StringComparison.Ordinal)
+                                || line.TrimStart().StartsWith("* ", StringComparison.Ordinal);
+                    var lineText = isBullet
+                        ? "• " + line.TrimStart().TrimStart('-', '•', '*', ' ')
+                        : line;
+
                     bodyCol.Item().Text(text =>
                     {
-                        text.DefaultTextStyle(style => style.FontSize(13).LineHeight(1.65f).FontColor("#1F2937"));
-                        foreach (var segment in ParseBoldSegments(line))
+                        text.DefaultTextStyle(ts => ts.FontSize(12).LineHeight(1.6f).FontColor("#1F2937"));
+                        foreach (var segment in ParseBoldSegments(lineText))
                         {
                             var span = text.Span(segment.Text);
                             if (segment.IsBold)
                             {
-                                span.SemiBold();
+                                span.SemiBold().FontColor("#6b4fa0");
                             }
                         }
                     });
                 }
             });
+
+            // Images placed in this section — teal border (PLSP style)
             if (images.Count > 0)
             {
-                col.Item().PaddingTop(10).Column(imageCol =>
+                col.Item().PaddingHorizontal(14).PaddingBottom(10).Column(imageCol =>
                 {
                     foreach (var image in images)
                     {
-                        imageCol.Item().Background("#FFFFFF").Border(1).BorderColor("#D5DDE8").Padding(8)
+                        imageCol.Item().Background("#FFFFFF").Border(2).BorderColor("#47b5a0").Padding(6)
                             .Column(img =>
                             {
-                                img.Item().AlignMiddle().Image(image.Content).FitWidth();
+                                img.Item().AlignCenter().Image(image.Content).FitWidth();
                                 if (!string.IsNullOrWhiteSpace(image.Caption))
                                 {
-                                    img.Item().PaddingTop(4).Text(image.Caption!).FontSize(9).FontColor("#475569");
+                                    img.Item().PaddingTop(4).AlignCenter()
+                                        .Text(image.Caption!).FontSize(9).FontColor("#6b4fa0").Italic();
                                 }
                             });
                     }

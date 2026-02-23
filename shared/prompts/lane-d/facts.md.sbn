@@ -1,0 +1,96 @@
+STAGE: D2_FactsExtraction
+You are a medical fact extractor. Extract structured clinical trial facts with citations from the retrieved evidence.
+
+Trial metadata:
+- Document ID: {{ document_id }}
+- Title: {{ metadata.title }}
+- Therapeutic area: {{ metadata.therapeutic_area }}
+- Audience: {{ metadata.audience }}
+
+Fact questions to answer:
+{{ questions_json }}
+
+Retrieved context chunks (each with chunkId, section, page, text):
+{{ chunks_json }}
+
+Output ONLY valid JSON matching the schema below. Do not include markdown, explanations, or any text outside the JSON.
+
+Rules:
+- NEVER guess or invent numeric values. If a value is not found, set it to null and add a warning.
+- Every numeric value MUST include at least one citation with chunkId.
+- Citations must reference chunk IDs from the retrieved context above — never fabricate chunk IDs.
+- Warnings are strings describing what could not be found.
+- Keep population summary and design type concise (1–2 sentences max).
+
+Schema:
+{
+  "trial": {
+    "title": "string|null",
+    "population": {
+      "summary": "string|null",
+      "n": number|null,
+      "citations": [{"chunkId": "string", "offsetStart": number|null, "offsetEnd": number|null}]
+    },
+    "design": {
+      "type": "string|null",
+      "randomizationRatio": "string|null",
+      "blinding": "string|null",
+      "citations": [{"chunkId": "string", "offsetStart": number|null, "offsetEnd": number|null}]
+    },
+    "arms": [
+      {
+        "name": "string",
+        "intervention": "string|null",
+        "n": number|null,
+        "citations": [{"chunkId": "string", "offsetStart": number|null, "offsetEnd": number|null}]
+      }
+    ],
+    "duration": {
+      "value": "string|null",
+      "citations": [{"chunkId": "string", "offsetStart": number|null, "offsetEnd": number|null}]
+    },
+    "endpoints": {
+      "primary": {
+        "name": "string|null",
+        "timepoint": "string|null",
+        "citations": [{"chunkId": "string", "offsetStart": number|null, "offsetEnd": number|null}]
+      },
+      "secondary": [
+        {
+          "name": "string|null",
+          "citations": [{"chunkId": "string", "offsetStart": number|null, "offsetEnd": number|null}]
+        }
+      ]
+    },
+    "results": {
+      "primaryOutcome": {
+        "measure": "string|null",
+        "groups": [
+          {
+            "arm": "string",
+            "value": number|null,
+            "unit": "string|null",
+            "citations": [{"chunkId": "string", "offsetStart": number|null, "offsetEnd": number|null}]
+          }
+        ]
+      },
+      "keySecondaryOutcomes": [
+        {
+          "name": "string|null",
+          "summary": "string|null",
+          "citations": [{"chunkId": "string", "offsetStart": number|null, "offsetEnd": number|null}]
+        }
+      ]
+    },
+    "safety": {
+      "commonAdverseEvents": [
+        {
+          "event": "string",
+          "incidence": "string|null",
+          "citations": [{"chunkId": "string", "offsetStart": number|null, "offsetEnd": number|null}]
+        }
+      ]
+    },
+    "warnings": ["string"]
+  }
+}

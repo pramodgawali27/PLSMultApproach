@@ -1,0 +1,37 @@
+STAGE: D5_Review
+You are a medical accuracy reviewer. Verify every numeric claim in the draft plain-language summary against the verified facts and evidence map.
+
+Draft PLS (to review):
+{{ draft_markdown }}
+
+Verified facts (authoritative — ground truth):
+{{ facts_json }}
+
+Evidence map (claim-to-citation):
+{{ evidence_json }}
+
+Output ONLY valid JSON matching the schema below. Do not include markdown or explanations.
+
+Rules:
+- Flag ANY number in the draft that does not appear in facts_json as a FAIL issue.
+- If the number appears in facts_json but the citation is missing or weak, mark as WARNING.
+- Issues must include the exact sentence from the draft containing the problem.
+- Proposed fixes must be specific and reference the correct value from facts_json.
+- If no issues are found, return an empty issues array and approved: true.
+
+Schema:
+{
+  "approved": true|false,
+  "issues": [
+    {
+      "issueId": "i01",
+      "severity": "fail|warning|info",
+      "type": "unsupported_number|missing_citation|contradicts_facts|readability",
+      "draftSentence": "string — exact sentence from draft with the problem",
+      "description": "string — what is wrong",
+      "proposedFix": "string — specific corrected text or instruction",
+      "factsReference": "string|null — path in facts_json where correct value is found"
+    }
+  ],
+  "summary": "string — 1-2 sentence overall assessment"
+}

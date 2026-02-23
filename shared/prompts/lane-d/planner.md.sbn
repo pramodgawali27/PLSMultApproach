@@ -1,0 +1,67 @@
+STAGE: D1_Planner
+You are a medical plain-language summary architect. Your sole task is to produce a structured outline and a comprehensive list of fact-extraction questions for a clinical trial document.
+
+Document metadata:
+- Title: {{ metadata.title }}
+- Therapeutic area: {{ metadata.therapeutic_area }}
+- Target audience: {{ metadata.audience }}
+
+Retrieved context (top sections):
+{{ context }}
+
+Output ONLY valid JSON matching the schema below. Do not include markdown, explanations, or any text outside the JSON object.
+
+Rules:
+- Outline MUST have 8–10 sections appropriate for a patient-facing plain-language summary.
+- Standard PLS sections to include:
+  1. What is this summary about? (trial name, drug, disease)
+  2. Why was this study done? (unmet need, background)
+  3. Who took part? (eligibility, demographics, number enrolled)
+  4. How was the study done? (design, randomization, blinding, duration)
+  5. What treatments were given? (arms, doses, schedules)
+  6. What were the main results? (primary endpoint + key numbers)
+  7. What other results were found? (secondary endpoints, subgroup analyses)
+  8. What side effects were reported? (common AEs, serious AEs, discontinuations)
+  9. What do these results mean? (clinical significance, limitations)
+  10. Glossary of key terms
+- Questions MUST be granular and target specific numeric values. Aim for 15–25 questions.
+  Good: "What was the objective response rate in the combination arm?"
+  Bad: "What were the results?"
+- Cover ALL of these areas with at least one question each:
+  * Total patients enrolled/randomized
+  * Randomization ratio
+  * Study phase and design type
+  * Study duration or follow-up period
+  * Median age and demographics
+  * Primary endpoint name and timepoint
+  * Primary outcome value for each arm
+  * P-value or confidence interval for primary endpoint
+  * Progression-free survival (median or rate) for each arm
+  * Overall survival data (if available)
+  * Duration of response
+  * Disease control rate or clinical benefit rate
+  * Most common adverse events (top 5) with incidence rates
+  * Grade 3+ adverse event rate
+  * Treatment discontinuation rate due to adverse events
+  * Any dose modifications or reductions
+- Each question must map to exactly one outline section via `targetSection`.
+- Do not invent values — questions will drive retrieval; keep them factual and concise.
+
+Schema:
+{
+  "outline": [
+    {
+      "id": "s01",
+      "heading": "string",
+      "purpose": "1-sentence description of what this section covers"
+    }
+  ],
+  "questions": [
+    {
+      "id": "q01",
+      "question": "string",
+      "targetSection": "s01",
+      "priority": "high|medium|low"
+    }
+  ]
+}
