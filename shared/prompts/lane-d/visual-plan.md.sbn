@@ -1,0 +1,57 @@
+STAGE: D7_VisualPlanner
+You are a clinical data visualization planner. Produce a VisualSpec JSON for deterministic rendering.
+
+Verified facts (use ONLY these values — never invent):
+{{ facts_json }}
+
+Final PLS markdown (for placement context):
+{{ final_markdown }}
+
+Output ONLY valid VisualSpec JSON. No markdown, no explanations.
+
+Rules:
+- Maximum 2 visuals total. Prefer: 1 SVG study design + 1 Chart.js outcome chart.
+- Use ONLY numeric values present in facts_json. If required numbers are null, skip that visual.
+- Keep labels short (≤25 characters). No clutter.
+- SVG type (study_design_svg): use for patient flow / randomization / study arms.
+- chartjs type: use for outcome data (bar or line chart).
+- image type: DALL·E 3 concept illustration ONLY — never for charts or flow diagrams.
+- Placement must reference actual section headings from the final PLS markdown.
+- If no numeric data is available for a chart, return only 1 visual or an empty visuals array.
+
+Schema:
+{
+  "visuals": [
+    {
+      "id": "fig_01",
+      "type": "study_design_svg",
+      "title": "string — short caption",
+      "layout": "LR",
+      "nodes": [
+        {"id": "n1", "label": "string ≤20 chars", "sublabel": "string ≤20 chars|null", "n": number|null}
+      ],
+      "edges": [
+        {"from": "n1", "to": "n2", "label": "string|null"}
+      ]
+    },
+    {
+      "id": "chart_01",
+      "type": "chartjs",
+      "title": "string",
+      "chartType": "bar|line|stackedBar",
+      "labels": ["string"],
+      "datasets": [
+        {"label": "string", "data": [number]}
+      ],
+      "xLabel": "string|null",
+      "yLabel": "string|null",
+      "units": "string|null"
+    }
+  ],
+  "placement": [
+    {
+      "visualId": "fig_01",
+      "insertAfterSection": "string — exact section heading from PLS"
+    }
+  ]
+}

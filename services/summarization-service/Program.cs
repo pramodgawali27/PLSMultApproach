@@ -8,6 +8,7 @@ using SummarizationService.Diagnostics;
 using SummarizationService.Extraction;
 using SummarizationService.Guardrails;
 using SummarizationService.Images;
+using SummarizationService.LaneD;
 using SummarizationService.Llm;
 using SummarizationService.Prompting;
 using SummarizationService.Rag;
@@ -88,6 +89,19 @@ else
 builder.Services.AddSingleton(GuardrailPolicyLoader.Load(builder.Configuration));
 builder.Services.AddSingleton<GuardrailEvaluator>();
 
+// ── Lane D: Agentic runtime ──────────────────────────────────────────────────
+builder.Services.AddHttpClient("foundry");
+var laneDRuntime = builder.Configuration["LANE_D_RUNTIME"] ?? "local";
+if (laneDRuntime.Equals("foundry", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddSingleton<ILaneDAgentRuntime, FoundryAgentRuntime>();
+}
+else
+{
+    builder.Services.AddSingleton<ILaneDAgentRuntime, LocalAgentRuntime>();
+}
+builder.Services.AddScoped<LaneDRouter>();
+
 var app = builder.Build();
 
 app.UseCorrelationId();
@@ -107,9 +121,34 @@ app.MapPost("/internal/summarize", async (
     PlsDbContext db,
     IRagRetriever ragRetriever,
     RagIndexer indexer,
+    LaneDRouter laneDRouter,
     IConfiguration configuration,
     CancellationToken cancellationToken) =>
 {
+    // ── Lane D: Agentic multi-step ───────────────────────────────────────────
+    if (request.Lane == SummaryLane.LaneD)
+    {
+        var laneDDoc = await db.Documents.FirstOrDefaultAsync(
+            x => x.Id == request.DocumentId, cancellationToken);
+        if (laneDDoc is null)
+            return Results.BadRequest("Document not found.");
+
+        var laneDCtx = new LaneDContext(
+            JobId: Guid.NewGuid(), // orchestrator populates real jobId; ok as correlation here
+            DocumentId: request.DocumentId,
+            TenantId: laneDDoc.TenantId,
+            UserId: laneDDoc.UserId,
+            StorageUri: request.StorageUri,
+            ContentType: request.ContentType,
+            Title: laneDDoc.Title,
+            TherapeuticArea: laneDDoc.TherapeuticArea,
+            Audience: laneDDoc.Audience,
+            PromptOverride: request.PromptOverride);
+
+        var laneDResult = await laneDRouter.HandleAsync(laneDCtx, cancellationToken);
+        return Results.Ok(new SummarizeResponse(laneDResult.FinalMarkdown, laneDResult.ModelInfoJson));
+    }
+
     if (request.Lane != SummaryLane.LaneA && request.Lane != SummaryLane.LaneC)
     {
         return Results.BadRequest("Lane not yet implemented.");

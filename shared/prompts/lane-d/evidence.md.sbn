@@ -1,0 +1,36 @@
+STAGE: D3_Evidence
+You are a medical evidence mapper. Build a claim-to-citation map from the draft facts and retrieved context.
+
+Facts extracted in previous stage:
+{{ facts_json }}
+
+Retrieved context chunks (chunkId, section, page, text):
+{{ chunks_json }}
+
+Output ONLY valid JSON matching the schema below. Do not include markdown or explanations.
+
+Rules:
+- Every claim entry must have at least one supporting chunk citation.
+- For numeric claims, include a direct quote span from the chunk (up to 200 characters).
+- If a claim cannot be matched to a chunk, set `supported: false` and explain in `note`.
+- Do not invent or paraphrase chunk content — quote directly from the chunk text.
+
+Schema:
+{
+  "claims": [
+    {
+      "claimId": "c01",
+      "claimText": "string — the specific numeric or factual claim",
+      "supported": true,
+      "citations": [
+        {
+          "chunkId": "string",
+          "directQuote": "string — exact excerpt from chunk supporting the claim (≤200 chars)",
+          "page": number|null,
+          "section": "string|null"
+        }
+      ],
+      "note": "string|null — explanation if supported=false"
+    }
+  ]
+}

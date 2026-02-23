@@ -136,14 +136,44 @@ export default function Home() {
       "Make sure the source document text is extractable."
     ],
     LaneD: [
-      "Use for compliance-heavy workflows.",
-      "Expect longer processing times."
+      "Runs 10 agentic stages: planner → facts → evidence → writer → review → finalize → visuals.",
+      "Every numeric claim is verified against retrieved evidence — no hallucinated numbers.",
+      "Generates deterministic SVG diagrams and bar charts from structured facts.",
+      "Expect 3–8 minutes processing time for typical clinical trial documents."
     ],
     LaneE: [
       "Best for bulk document sets and automated reviews.",
       "Designed for high-volume tenant pipelines."
     ]
   };
+
+  // Lane D agentic stages (D0–D9) with estimated durations for animated progress
+  const laneDStages = [
+    { key: "D0", label: "D0 · Canonicalize & index", estimatedSec: 20 },
+    { key: "D1", label: "D1 · Planner — outline & questions", estimatedSec: 25 },
+    { key: "D2", label: "D2 · Facts — structured extraction", estimatedSec: 40 },
+    { key: "D3", label: "D3 · Evidence — claim mapping", estimatedSec: 30 },
+    { key: "D4", label: "D4 · Writer — plain-language draft", estimatedSec: 50 },
+    { key: "D5", label: "D5 · Review — numeric verification", estimatedSec: 30 },
+    { key: "D6", label: "D6 · Finalize — apply corrections", estimatedSec: 35 },
+    { key: "D7", label: "D7 · Visual planner — spec generation", estimatedSec: 25 },
+    { key: "D8", label: "D8 · Render — SVG & charts", estimatedSec: 10 },
+    { key: "D9", label: "D9 · Images — concept illustrations", estimatedSec: 20 }
+  ];
+
+  // Estimate which Lane D stage we're in based on elapsed processing time
+  const laneDPhase = useMemo(() => {
+    if (selectedLane !== "LaneD" || jobStatus !== "Processing") return -1;
+    if (!jobStartedAt) return 0;
+    const elapsedSec = (Date.now() - jobStartedAt) / 1000;
+    let cumulative = 0;
+    for (let i = 0; i < laneDStages.length; i++) {
+      cumulative += laneDStages[i].estimatedSec;
+      if (elapsedSec < cumulative) return i;
+    }
+    return laneDStages.length - 1;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedLane, jobStatus, jobStartedAt, jobElapsedMinutes]); // jobElapsedMinutes drives re-evaluation
 
   const stages = [
     {
@@ -333,27 +363,74 @@ export default function Home() {
 
             <div className="mt-4 rounded-2xl border border-sand bg-white/70 p-4 text-sm">
               <p className="text-xs uppercase tracking-wide text-slate-500">Progress</p>
-              <div className="mt-3 space-y-2">
-                {stages.map((stage) => (
-                  <div key={stage.key} className="flex items-center gap-3">
-                    <span
-                      className={`h-2.5 w-2.5 rounded-full ${
-                        stage.state === "done"
-                          ? "bg-moss"
-                          : stage.state === "active"
-                            ? "bg-ember"
-                            : stage.state === "failed"
-                              ? "bg-ink"
-                              : "bg-slate-300"
-                      }`}
-                    />
-                    <span className="text-slate-700">{stage.label}</span>
-                  </div>
-                ))}
-              </div>
-              {jobElapsedMinutes > 2 && (jobStatus === "Queued" || jobStatus === "Processing") && (
+
+              {/* Lane D: show agentic stage pipeline */}
+              {selectedLane === "LaneD" && (jobStatus === "Processing" || jobStatus === "Completed") ? (
+                <div className="mt-3 space-y-1.5">
+                  {laneDStages.map((stage, idx) => {
+                    const isDone = jobStatus === "Completed" || idx < laneDPhase;
+                    const isActive = jobStatus === "Processing" && idx === laneDPhase;
+                    return (
+                      <div key={stage.key} className="flex items-center gap-3">
+                        <span
+                          className={`h-2 w-2 flex-shrink-0 rounded-full transition-colors ${
+                            isDone
+                              ? "bg-moss"
+                              : isActive
+                                ? "animate-pulse bg-ember"
+                                : "bg-slate-300"
+                          }`}
+                        />
+                        <span
+                          className={`text-xs ${
+                            isDone
+                              ? "text-slate-500 line-through"
+                              : isActive
+                                ? "font-semibold text-slate-800"
+                                : "text-slate-400"
+                          }`}
+                        >
+                          {stage.label}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {jobStatus === "Processing" && (
+                    <p className="mt-2 text-xs text-slate-500">
+                      Multi-agent pipeline running — please wait. Lane D typically takes 3–8 minutes.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                /* Lanes A / B / C / E: generic 4-step progress */
+                <div className="mt-3 space-y-2">
+                  {stages.map((stage) => (
+                    <div key={stage.key} className="flex items-center gap-3">
+                      <span
+                        className={`h-2.5 w-2.5 rounded-full ${
+                          stage.state === "done"
+                            ? "bg-moss"
+                            : stage.state === "active"
+                              ? "bg-ember"
+                              : stage.state === "failed"
+                                ? "bg-ink"
+                                : "bg-slate-300"
+                        }`}
+                      />
+                      <span className="text-slate-700">{stage.label}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {jobElapsedMinutes > 2 && selectedLane !== "LaneD" && (jobStatus === "Queued" || jobStatus === "Processing") && (
                 <p className="mt-3 text-xs text-ember">
                   This step is taking longer than usual. Check service logs for stuck jobs.
+                </p>
+              )}
+              {jobElapsedMinutes > 10 && selectedLane === "LaneD" && jobStatus === "Processing" && (
+                <p className="mt-3 text-xs text-ember">
+                  Lane D is taking longer than usual. Check service logs for timeouts.
                 </p>
               )}
             </div>
