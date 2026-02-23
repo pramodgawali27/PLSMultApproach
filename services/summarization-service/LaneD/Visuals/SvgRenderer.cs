@@ -5,13 +5,13 @@ namespace SummarizationService.LaneD.Visuals;
 /// <summary>
 /// Deterministic SVG renderer for clinical study design diagrams.
 ///
-/// Design rules (from PDF spec):
+/// Design rules (Taylor &amp; Francis PLSP reference):
 ///   - Fixed canvas: 900×450 for LR layout
 ///   - Fixed node width: 160px, height: 70px
 ///   - Max 12 nodes to avoid clutter
 ///   - Automatic text wrapping (max 2 lines per label)
 ///   - LR grid layout with column lanes for arms
-///   - Teal (#0ea5e9) and purple (#7c3aed) accent colors
+///   - PLSP colors: Purple (#6b4fa0) for treatment arm, Teal (#47b5a0) for control arm
 /// </summary>
 public static class SvgRenderer
 {
@@ -22,13 +22,14 @@ public static class SvgRenderer
     private const int NodeRx = 10;
     private const int HorizontalGap = 40;
     private const int VerticalGap = 30;
-    private const string PrimaryColor = "#0ea5e9";
-    private const string SecondaryColor = "#7c3aed";
+    // PLSP reference colors: purple = treatment arm, teal = comparator/control arm
+    private const string TreatmentColor = "#6b4fa0";   // PLSP purple
+    private const string ControlColor = "#47b5a0";      // PLSP teal
     private const string NeutralColor = "#64748b";
-    private const string BackgroundColor = "#f8fafc";
+    private const string BackgroundColor = "#ffffff";
     private const string NodeFill = "#ffffff";
-    private const string NodeStroke = "#cbd5e1";
-    private const string TextColor = "#0f172a";
+    private const string NodeStroke = "#d1c4e9";        // light purple border
+    private const string TextColor = "#1f2937";
 
     /// <summary>Render a study design SVG from the visual spec nodes/edges.</summary>
     public static string Render(VisualItem visual)
@@ -91,8 +92,12 @@ public static class SvgRenderer
             var node = nodes[i];
             if (!positions.TryGetValue(node.Id, out var pos)) continue;
 
-            // Alternate accent colors
-            var accent = i < 2 ? PrimaryColor : (i < 4 ? SecondaryColor : PrimaryColor);
+            // PLSP color assignment:
+            // i=0 → root/enrollment node: neutral gray
+            // i=1 → first child (treatment arm): purple
+            // i=2 → second child (control arm): teal
+            // i≥3 → alternating purple/teal
+            var accent = i == 0 ? NeutralColor : (i % 2 == 1 ? TreatmentColor : ControlColor);
             var headerHeight = 8;
 
             // Node rectangle

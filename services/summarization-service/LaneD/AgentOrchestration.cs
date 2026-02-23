@@ -144,7 +144,7 @@ public sealed class LocalAgentOrchestrator
             });
 
         var evidenceResp = await _runtime.RunAsync(
-            new AgentRequest("EvidenceAgent", EvidenceSystemPrompt(), evidencePrompt, 0.1, 1500, null),
+            new AgentRequest("EvidenceAgent", EvidenceSystemPrompt(), evidencePrompt, 0.1, 3000, null),
             cancellationToken);
         trace?.WriteText("D3_evidence_response.txt", evidenceResp.Text);
 
@@ -240,7 +240,7 @@ public sealed class LocalAgentOrchestrator
             });
 
         var visualPlanResp = await _runtime.RunAsync(
-            new AgentRequest("VisualPlannerAgent", VisualPlannerSystemPrompt(), visualPlanPrompt, 0.1, 1500, null),
+            new AgentRequest("VisualPlannerAgent", VisualPlannerSystemPrompt(), visualPlanPrompt, 0.1, 2000, null),
             cancellationToken);
         trace?.WriteText("D7_visualspec_response.txt", visualPlanResp.Text);
 
@@ -327,7 +327,19 @@ public sealed class LocalAgentOrchestrator
             factsWarnings = ExtractWarnings(factsJson),
             reviewApproved = review?.Approved,
             reviewIssueCount = review?.Issues?.Count ?? 0,
-            visualsRendered = renderedVisuals.Count
+            visualsRendered = renderedVisuals.Count,
+            // Rendered visual file paths — used by SummaryImageExtractor for PDF export
+            renderedVisuals = renderedVisuals.Select(v => new
+            {
+                id = v.VisualId,
+                type = v.Type,
+                filePath = v.FilePath,
+                contentType = "image/svg+xml",
+                caption = v.VisualId,
+                placement = visualSpec?.Placement?
+                    .FirstOrDefault(p => string.Equals(p.VisualId, v.VisualId, StringComparison.OrdinalIgnoreCase))
+                    ?.InsertAfterSection
+            }).ToList()
         };
 
         return new LaneDResult(

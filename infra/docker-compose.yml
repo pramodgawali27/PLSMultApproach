@@ -96,6 +96,15 @@ services:
       RAG_AUTO_INDEX: ${RAG_AUTO_INDEX:-true}
       TRACE_ENABLED: ${TRACE_ENABLED:-true}
       TRACE_OUTPUT_DIR: /data/trace
+      ENABLE_LANE_D: ${ENABLE_LANE_D:-true}
+      ENABLE_DALLE_IMAGES_LANE_D: ${ENABLE_DALLE_IMAGES_LANE_D:-true}
+      LANE_D_RUNTIME: ${LANE_D_RUNTIME:-local}
+      LANE_D_CHUNK_TOKENS: ${LANE_D_CHUNK_TOKENS:-1800}
+      LANE_D_CHUNK_OVERLAP: ${LANE_D_CHUNK_OVERLAP:-250}
+      FOUNDRY_PROJECT_ENDPOINT: ${FOUNDRY_PROJECT_ENDPOINT:-}
+      FOUNDRY_AGENT_ID: ${FOUNDRY_AGENT_ID:-}
+      FOUNDRY_API_KEY: ${FOUNDRY_API_KEY:-}
+      FOUNDRY_API_VERSION: ${FOUNDRY_API_VERSION:-2025-01-01-preview}
       ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=pls;Username=pls;Password=pls
     ports:
       - "5074:8080"

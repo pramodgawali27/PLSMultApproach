@@ -10,7 +10,7 @@ namespace SummarizationService.LaneD.Visuals;
 /// Design choices:
 ///   - Pure SVG output (no Playwright / headless browser required)
 ///   - Deterministic layout: fixed canvas 600×300, axis margin 60px
-///   - Teal (#0ea5e9) for primary dataset, purple (#7c3aed) for secondary
+///   - PLSP colors: Purple (#6b4fa0) for treatment/dataset[0], Teal (#47b5a0) for comparator/dataset[1]
 ///   - Max 8 bars or data points to avoid label overflow
 /// </summary>
 public static class ChartRenderer
@@ -21,13 +21,14 @@ public static class ChartRenderer
     private const int MarginBottom = 55;
     private const int MarginTop = 40;
     private const int MarginRight = 20;
-    private const string Background = "#f8fafc";
-    private const string AxisColor = "#94a3b8";
-    private const string TextColor = "#0f172a";
-    private const string GridColor = "#e2e8f0";
+    private const string Background = "#ffffff";
+    private const string AxisColor = "#64748b";
+    private const string TextColor = "#1f2937";
+    private const string GridColor = "#e5e7eb";
 
+    // PLSP reference colors: dataset[0]=purple(treatment), dataset[1]=teal(control)
     private static readonly string[] DatasetColors =
-        { "#0ea5e9", "#7c3aed", "#10b981", "#f59e0b", "#ef4444" };
+        { "#6b4fa0", "#47b5a0", "#10b981", "#f59e0b", "#ef4444" };
 
     public static string Render(VisualItem visual)
     {

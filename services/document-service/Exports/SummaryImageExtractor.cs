@@ -60,11 +60,20 @@ public sealed class SummaryImageExtractor
         {
             using var doc = System.Text.Json.JsonDocument.Parse(modelInfoJson);
             var images = new List<SummaryImage>();
+
+            // Lane D: rendered SVG/chart visuals with placement info
+            if (doc.RootElement.TryGetProperty("renderedVisuals", out var renderedVisuals))
+            {
+                images.AddRange(ReadRenderedVisualsFromElement(renderedVisuals));
+            }
+
+            // Lane A/B/C: extracted images from docx
             if (doc.RootElement.TryGetProperty("extraction", out var extraction))
             {
                 images.AddRange(ReadImagesFromElement(extraction, "images"));
             }
 
+            // Generated DALL·E images
             if (doc.RootElement.TryGetProperty("generatedImages", out var generatedImages))
             {
                 images.AddRange(ReadImagesFromElement(generatedImages, null));
@@ -75,6 +84,40 @@ public sealed class SummaryImageExtractor
         catch (System.Text.Json.JsonException)
         {
             return Array.Empty<SummaryImage>();
+        }
+    }
+
+    private static IEnumerable<SummaryImage> ReadRenderedVisualsFromElement(System.Text.Json.JsonElement element)
+    {
+        if (element.ValueKind != System.Text.Json.JsonValueKind.Array)
+        {
+            yield break;
+        }
+
+        foreach (var item in element.EnumerateArray())
+        {
+            if (!item.TryGetProperty("filePath", out var filePathEl))
+            {
+                continue;
+            }
+
+            var filePath = filePathEl.GetString();
+            if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+            {
+                continue;
+            }
+
+            var contentType = item.TryGetProperty("contentType", out var ctEl)
+                ? ctEl.GetString() ?? "image/svg+xml"
+                : "image/svg+xml";
+            var caption = item.TryGetProperty("caption", out var captEl)
+                ? captEl.GetString()
+                : null;
+            var placement = item.TryGetProperty("placement", out var plEl)
+                ? plEl.GetString()
+                : null;
+
+            yield return new SummaryImage(File.ReadAllBytes(filePath), contentType, caption, placement);
         }
     }
 

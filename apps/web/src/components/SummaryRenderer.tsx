@@ -10,6 +10,8 @@ export default function SummaryRenderer({ content }: SummaryRendererProps) {
     <div className="space-y-6">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        // Allow data: URIs for inline SVG visuals (react-markdown blocks them by default)
+        urlTransform={(url) => url}
         components={{
           h1: ({ children }) => (
             <h1 className="text-3xl font-semibold text-slate-900">{children}</h1>
