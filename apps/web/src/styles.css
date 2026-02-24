@@ -8,15 +8,15 @@
 
 body {
   font-family: "Crimson Text", serif;
-  background: radial-gradient(circle at top left, #f7efe4 0%, #f5f1ea 45%, #ece4d8 100%);
+  background: #f5f1ea;
   min-height: 100vh;
 }
 
 .glass-panel {
-  background: rgba(245, 241, 234, 0.8);
-  border: 1px solid rgba(43, 93, 74, 0.15);
-  box-shadow: 0 20px 60px rgba(18, 18, 18, 0.08);
-  backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(232, 221, 208, 0.8);
+  box-shadow: 0 2px 16px rgba(18, 18, 18, 0.06), 0 0 0 1px rgba(232, 221, 208, 0.4);
+  backdrop-filter: blur(8px);
 }
 
 .badge {
@@ -24,16 +24,47 @@ body {
 }
 
 .fade-in {
-  animation: fadeIn 0.6s ease both;
+  animation: fadeIn 0.35s ease both;
 }
 
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* Stat card used in Dashboard */
+.stat-card {
+  @apply rounded-2xl border border-sand bg-white p-5;
+}
+
+/* Compliance status badges used in Audit tab */
+.compliance-pass {
+  @apply inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700;
+}
+
+.compliance-fail {
+  @apply inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700;
+}
+
+.compliance-warn {
+  @apply inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700;
+}
+
+/* Underline tab navigation */
+.tab-underline {
+  @apply px-4 py-2.5 text-sm font-semibold transition-colors border-b-2 -mb-px;
+}
+
+.tab-underline-active {
+  @apply border-violet text-violet;
+}
+
+.tab-underline-inactive {
+  @apply border-transparent text-slate-500 hover:text-ink;
 }

@@ -9,7 +9,10 @@ export default {
         fog: "#f5f1ea",
         moss: "#2b5d4a",
         clay: "#d9c7b2",
-        ember: "#d4572a"
+        ember: "#d4572a",
+        sand: "#e8ddd0",
+        violet: "#6b4fa0",
+        teal: "#47b5a0"
       },
       fontFamily: {
         display: ["'Space Grotesk'", "sans-serif"],

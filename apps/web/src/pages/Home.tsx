@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   fetchEntitlements,
+  fetchJobStage,
   fetchPromptTemplate,
   SummaryLane,
   uploadDocument
@@ -34,6 +35,14 @@ export default function Home() {
   const jobStatus = jobData?.status ?? "Queued";
   const jobError = jobData?.errorMessage ?? null;
   const jobElapsedMinutes = jobStartedAt ? (Date.now() - jobStartedAt) / 60000 : 0;
+
+  // Poll real Lane D stage every 2s while processing
+  const { data: stageData } = useQuery({
+    queryKey: ["job-stage", jobId],
+    queryFn: () => fetchJobStage(jobId!),
+    enabled: Boolean(jobId) && selectedLane === "LaneD" && jobStatus === "Processing",
+    refetchInterval: 2000
+  });
 
   const allowedLanes = useMemo(
     () => new Set(entitlements?.enabledLanes ?? []),
@@ -80,70 +89,75 @@ export default function Home() {
     {
       lane: "LaneA" as SummaryLane,
       title: "Lane A",
-      description: "Prompt-based summary (fast, low cost)",
-      bestFor: "Quick summaries",
-      badges: ["Fast"]
+      description: "Prompt-based generation — fast turnaround for clinical documents",
+      bestFor: "Early-stage drafts & quick reviews",
+      badges: ["Fast", "Low cost"]
     },
     {
       lane: "LaneB" as SummaryLane,
       title: "Lane B",
-      description: "Fine-tuned model (consistent style)",
-      bestFor: "Consistent tone",
-      badges: ["Consistent"]
+      description: "Fine-tuned model for consistent patient-accessible language",
+      bestFor: "Repeatable patient communications",
+      badges: ["Consistent", "Patient-friendly"]
     },
     {
       lane: "LaneC" as SummaryLane,
       title: "Lane C",
-      description: "RAG grounded summary with citations",
-      bestFor: "Evidence-based",
-      badges: ["Citations", "Evidence"]
+      description: "RAG-grounded summary with traceable evidence citations",
+      bestFor: "Regulatory submissions & evidence review",
+      badges: ["Citations", "Evidence", "RAG"]
     },
     {
       lane: "LaneD" as SummaryLane,
       title: "Lane D",
-      description: "Agentic multi-step orchestration",
-      bestFor: "Premium workflows",
-      badges: ["Premium", "Diagrams"]
+      description: "Multi-agent pipeline with claim verification and PLSP-compliant visuals",
+      bestFor: "Taylor & Francis PLSP format, complex trials",
+      badges: ["Agentic", "Verified", "Diagrams"]
     },
     {
       lane: "LaneE" as SummaryLane,
       title: "Lane E",
-      description: "Batch processing for large portfolios",
-      bestFor: "High-volume runs",
-      badges: ["Batch", "Automation"]
+      description: "Enterprise batch processing for portfolio-scale submissions",
+      bestFor: "High-volume regulatory pipelines",
+      badges: ["Batch", "Automation", "Enterprise"]
     }
   ];
 
   const selectedLaneMeta = laneCards.find((card) => card.lane === selectedLane);
   const lanePricing: Record<SummaryLane, string> = {
-    LaneA: "Low cost · Fast turnaround",
-    LaneB: "Medium cost · Consistent tone",
-    LaneC: "Higher cost · Evidence-based",
-    LaneD: "Premium · Multi-step + diagrams",
-    LaneE: "Enterprise · Batch throughput"
+    LaneA: "Low cost · Fastest turnaround · No retrieval",
+    LaneB: "Medium cost · Consistent tone · Template-driven",
+    LaneC: "Higher cost · Evidence-grounded · Citation trail",
+    LaneD: "Premium · 10-stage agentic pipeline · PLSP-compliant",
+    LaneE: "Enterprise · Parallel batch · Portfolio-scale"
   };
   const laneTips: Record<SummaryLane, string[]> = {
     LaneA: [
-      "Best for quick summaries under 10 pages.",
-      "Use prompt override for tone control."
+      "Ideal for documents under 10 pages or when speed matters.",
+      "Use prompt override to apply your organisation's plain-language style guide.",
+      "Results are generated in seconds — best for iterating on tone and structure."
     ],
     LaneB: [
-      "Great for repeatable template output.",
-      "Use for consistent patient-friendly language."
+      "Uses a model fine-tuned on life sciences plain-language conventions.",
+      "Delivers repeatable output suitable for patient-facing communications.",
+      "Consistent section structure across large document portfolios."
     ],
     LaneC: [
-      "Ideal for long documents with citations.",
-      "Make sure the source document text is extractable."
+      "Retrieves context from the source document using semantic search.",
+      "Every claim in the summary is anchored to a source chunk with citation.",
+      "Ideal for long clinical trial reports and documents with complex evidence structures."
     ],
     LaneD: [
       "Runs 10 agentic stages: planner → facts → evidence → writer → review → finalize → visuals.",
-      "Every numeric claim is verified against retrieved evidence — no hallucinated numbers.",
-      "Generates deterministic SVG diagrams and bar charts from structured facts.",
+      "Every numeric claim is cross-checked against retrieved evidence — no hallucinated numbers.",
+      "Generates PLSP-compliant SVG diagrams and bar charts from structured facts.",
+      "Outputs follow Taylor & Francis Plain Language Summary Publication (PLSP) format.",
       "Expect 3–8 minutes processing time for typical clinical trial documents."
     ],
     LaneE: [
-      "Best for bulk document sets and automated reviews.",
-      "Designed for high-volume tenant pipelines."
+      "Designed for automated, high-volume document processing pipelines.",
+      "Process entire study portfolios in parallel across tenant accounts.",
+      "Requires enterprise entitlement — contact your account manager."
     ]
   };
 
@@ -161,9 +175,14 @@ export default function Home() {
     { key: "D9", label: "D9 · Images — concept illustrations", estimatedSec: 20 }
   ];
 
-  // Estimate which Lane D stage we're in based on elapsed processing time
+  // Derive current Lane D phase from real stage data; fall back to time-estimation if not yet available
   const laneDPhase = useMemo(() => {
     if (selectedLane !== "LaneD" || jobStatus !== "Processing") return -1;
+    if (stageData?.stageId) {
+      const idx = laneDStages.findIndex((s) => stageData.stageId.startsWith(s.key));
+      return idx >= 0 ? idx : 0;
+    }
+    // Fallback: estimate from elapsed time until first stage report arrives
     if (!jobStartedAt) return 0;
     const elapsedSec = (Date.now() - jobStartedAt) / 1000;
     let cumulative = 0;
@@ -173,7 +192,7 @@ export default function Home() {
     }
     return laneDStages.length - 1;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedLane, jobStatus, jobStartedAt, jobElapsedMinutes]); // jobElapsedMinutes drives re-evaluation
+  }, [selectedLane, jobStatus, stageData, jobStartedAt, jobElapsedMinutes]);
 
   const stages = [
     {
@@ -216,10 +235,11 @@ export default function Home() {
 
   return (
     <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
-      <section className="glass-panel rounded-3xl p-6 shadow-xl">
-        <h2 className="font-display text-2xl font-semibold">Upload & generate</h2>
-        <p className="mt-2 text-sm text-slate-600">
-          Upload a medical document and generate a plain-language summary.
+      <section className="glass-panel rounded-3xl p-6">
+        <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-violet">Document Processing</p>
+        <h2 className="mt-1 font-display text-2xl font-bold text-ink">Upload & generate</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Upload a clinical or regulatory document and generate a plain-language summary.
         </p>
 
         <div className="mt-6">
@@ -259,10 +279,11 @@ export default function Home() {
         </div>
 
         <div className="mt-6">
-          <label className="text-sm font-semibold">Lane selection</label>
-          {loadingEntitlements && <p className="text-sm text-slate-500">Loading entitlements...</p>}
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Summarization Lane</p>
+          <p className="mt-0.5 text-xs text-slate-400">Choose the pipeline that matches your document and regulatory requirements.</p>
+          {loadingEntitlements && <p className="mt-2 text-xs text-slate-400">Loading entitlements…</p>}
           {!loadingEntitlements && (entitlements?.enabledLanes?.length ?? 0) === 0 && (
-            <p className="text-sm text-ember">Unable to load entitlements.</p>
+            <p className="mt-2 text-sm text-ember">Unable to load entitlements.</p>
           )}
           <div className="mt-3 grid gap-3 md:grid-cols-2">
             {laneCards.map((card) => (
@@ -325,13 +346,13 @@ export default function Home() {
 
         <div className="mt-6 flex flex-wrap gap-3">
           <button
-            className="rounded-full bg-ink px-6 py-3 text-sm font-semibold text-fog disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-full bg-ink px-6 py-3 text-sm font-semibold text-fog transition-colors hover:bg-ink/80 disabled:cursor-not-allowed disabled:opacity-50"
             onClick={handleUpload}
             disabled={!file || isSubmitting}
           >
-            {isSubmitting ? "Starting..." : "Generate summary"}
+            {isSubmitting ? "Starting…" : "Generate summary"}
           </button>
-          <button className="rounded-full border border-sand px-6 py-3 text-sm font-semibold" type="button">
+          <button className="rounded-full border border-sand px-6 py-3 text-sm font-semibold text-slate-600 transition-colors hover:bg-fog" type="button">
             Save as draft
           </button>
         </div>
@@ -343,8 +364,9 @@ export default function Home() {
       <section className="glass-panel rounded-3xl p-6 lg:sticky lg:top-8 self-start">
         {jobId || isSubmitting ? (
           <>
-            <h2 className="font-display text-2xl font-semibold">Job status</h2>
-            <p className="mt-2 text-sm text-slate-600">Live status updates for your latest job.</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-violet">Pipeline</p>
+            <h2 className="mt-1 font-display text-2xl font-bold text-ink">Job status</h2>
+            <p className="mt-1 text-sm text-slate-500">Live updates for your latest processing job.</p>
 
             <div className="mt-6 space-y-3 rounded-2xl bg-white/70 p-4 text-sm">
               <div className="flex items-center justify-between">
@@ -396,9 +418,17 @@ export default function Home() {
                     );
                   })}
                   {jobStatus === "Processing" && (
-                    <p className="mt-2 text-xs text-slate-500">
-                      Multi-agent pipeline running — please wait. Lane D typically takes 3–8 minutes.
-                    </p>
+                    <div className="mt-2 space-y-1">
+                      {stageData?.message && (
+                        <p className="flex items-center gap-1.5 text-xs font-medium text-slate-700">
+                          <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" />
+                          {stageData.message}
+                        </p>
+                      )}
+                      <p className="text-xs text-slate-400">
+                        Multi-agent pipeline running — Lane D typically takes 3–8 minutes.
+                      </p>
+                    </div>
                   )}
                 </div>
               ) : (
@@ -436,22 +466,26 @@ export default function Home() {
             </div>
 
             {jobData?.summaryId && jobData.status === "Completed" && (
-              <div className="mt-6 rounded-2xl border border-sand bg-white/70 p-4">
-                <p className="text-xs uppercase tracking-wide text-slate-500">Summary ready</p>
-                <h3 className="mt-2 font-semibold">Summary in plain language</h3>
+              <div className="mt-6 rounded-2xl border border-teal/30 bg-teal/5 p-4">
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-teal" />
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-teal">Summary ready</p>
+                </div>
+                <h3 className="mt-2 font-display text-base font-bold text-ink">Plain Language Summary</h3>
+                <p className="mt-0.5 text-xs text-slate-500">Your document has been successfully summarized.</p>
                 <div className="mt-4 flex flex-wrap gap-3">
                   <a
-                    className="rounded-full bg-moss px-4 py-2 text-xs font-semibold text-white"
+                    className="rounded-full bg-moss px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-moss/90"
                     href={`/app/summaries/${jobData.summaryId}`}
                   >
                     View Summary
                   </a>
                   <button
-                    className="rounded-full border border-sand px-4 py-2 text-xs font-semibold"
+                    className="rounded-full border border-sand px-4 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-fog"
                     type="button"
                     onClick={() => setJobId(null)}
                   >
-                    Start new
+                    New document
                   </button>
                 </div>
               </div>
@@ -459,32 +493,38 @@ export default function Home() {
           </>
         ) : (
           <>
-            <h2 className="font-display text-2xl font-semibold">Lane details</h2>
-            <p className="mt-2 text-sm text-slate-600">
-              Compare lanes, pricing, and tips before generating.
+            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-violet">Lane Guide</p>
+            <h2 className="mt-1 font-display text-2xl font-bold text-ink">Lane details</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Review capabilities and guidance for the selected lane.
             </p>
 
-            <div className="mt-6 rounded-2xl bg-white/70 p-4">
+            <div className="mt-6 rounded-2xl border border-sand bg-white p-4">
               <div className="flex items-center justify-between">
-                <span className="text-xs uppercase tracking-wide text-slate-500">Selected lane</span>
-                <span className="badge bg-slate-100 text-slate-700">{selectedLaneMeta?.title}</span>
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Selected</span>
+                <span className="rounded-full bg-violet/10 px-2.5 py-1 text-xs font-semibold text-violet">
+                  {selectedLaneMeta?.title}
+                </span>
               </div>
-              <p className="mt-3 text-sm font-semibold">{selectedLaneMeta?.description}</p>
-              <p className="mt-1 text-xs text-slate-500">{lanePricing[selectedLane]}</p>
-              <div className="mt-4 flex flex-wrap gap-2">
+              <p className="mt-2 text-sm font-semibold text-ink">{selectedLaneMeta?.description}</p>
+              <p className="mt-1 text-xs text-slate-400">{lanePricing[selectedLane]}</p>
+              <div className="mt-3 flex flex-wrap gap-1.5">
                 {selectedLaneMeta?.badges.map((badge) => (
-                  <span key={badge} className="badge bg-slate-100 text-slate-600">
+                  <span key={badge} className="rounded-full bg-violet/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet">
                     {badge}
                   </span>
                 ))}
               </div>
             </div>
 
-            <div className="mt-4 rounded-2xl border border-sand bg-white/70 p-4">
-              <p className="text-xs uppercase tracking-wide text-slate-500">Tips</p>
-              <ul className="mt-2 space-y-2 text-sm text-slate-600">
+            <div className="mt-4 rounded-2xl border border-sand bg-white p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Guidance</p>
+              <ul className="mt-2 space-y-2">
                 {laneTips[selectedLane].map((tip) => (
-                  <li key={tip}>• {tip}</li>
+                  <li key={tip} className="flex gap-2 text-xs text-slate-600">
+                    <span className="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-violet/40" />
+                    {tip}
+                  </li>
                 ))}
               </ul>
             </div>
