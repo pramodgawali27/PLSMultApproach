@@ -231,12 +231,18 @@ public sealed class LocalAgentOrchestrator
         await stageReporter.ReportAsync("D7_VisualPlan", "Planning deterministic visuals.", cancellationToken);
         var d7Start = DateTimeOffset.UtcNow;
 
+        // Only pass section headings (lines starting with #) for placement context — not the full body.
+        // This significantly reduces D7 input tokens while preserving all placement information.
+        var sectionHeadings = string.Join("\n", finalMarkdown
+            .Split('\n', StringSplitOptions.None)
+            .Where(l => l.TrimStart().StartsWith("#", StringComparison.Ordinal)));
+
         var visualPlanPrompt = _templates.Render(
             Path.Combine("lane-d", "visual-plan.md.sbn"),
             new
             {
                 facts_json = factsJson,
-                final_markdown = finalMarkdown
+                final_markdown = sectionHeadings
             });
 
         var visualPlanResp = await _runtime.RunAsync(

@@ -6,17 +6,20 @@ using Microsoft.Extensions.Logging;
 namespace SummarizationService.LaneD;
 
 /// <summary>
-/// Foundry Agent Service runtime using the OpenAI Responses API.
+/// Foundry Agent Service runtime using the Azure OpenAI Responses API.
 /// Activated when LANE_D_RUNTIME=foundry.
 ///
-/// Uses the Azure OpenAI base endpoint Responses API (confirmed working):
+/// Uses the base Azure OpenAI endpoint (confirmed working):
 ///   POST {AZURE_OPENAI_ENDPOINT}/openai/responses?api-version=2025-03-01-preview
 ///
-/// The project-scoped endpoint (/api/projects/{name}) rejects all api-version values.
-/// The base endpoint with api-version=2025-03-01-preview and model=gpt-4o returns HTTP 200.
+/// NOTE: The published application endpoint
+///   ({FOUNDRY_PROJECT_ENDPOINT}/applications/{FOUNDRY_AGENT_ID}/protocols/openai/responses)
+///   requires Azure RBAC (Microsoft.MachineLearningServices/workspaces/agents/action) and
+///   does NOT accept API key auth alone. To use it, configure AZURE_CLIENT_ID with a service
+///   principal that has the "Azure AI Inference Deployment Operator" role.
+///   Until then, the base endpoint with gpt-4o is used.
 ///
 /// This is a single synchronous call — no threads, no polling.
-/// Mirrors what AIProjectClient.OpenAI.GetProjectResponsesClientForAgent().CreateResponse() does.
 /// </summary>
 public sealed class FoundryAgentRuntime : ILaneDAgentRuntime
 {
@@ -24,15 +27,14 @@ public sealed class FoundryAgentRuntime : ILaneDAgentRuntime
     private readonly IConfiguration _configuration;
     private readonly ILogger<FoundryAgentRuntime> _logger;
 
-    // Use the base Azure OpenAI endpoint — project endpoint rejects all api-versions
+    // Base Azure OpenAI endpoint — accepts api-key auth and confirmed working
     private string BaseEndpoint => _configuration["AZURE_OPENAI_ENDPOINT"]
         ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT is required.");
 
-    // Use the standard deployment (gpt-4o) — Foundry agents are not accessible at the base endpoint level
+    // gpt-4o deployment — used until Azure AD auth is configured for the published PLS-Agent app
     private string ModelDeployment => _configuration["AZURE_OPENAI_DEPLOYMENT_PROMPT"]
         ?? throw new InvalidOperationException("AZURE_OPENAI_DEPLOYMENT_PROMPT is required.");
 
-    // 2025-03-01-preview is confirmed working with the Responses API on the base endpoint
     private string ApiVersion => _configuration["FOUNDRY_API_VERSION"] ?? "2025-03-01-preview";
 
     public FoundryAgentRuntime(
@@ -76,11 +78,8 @@ public sealed class FoundryAgentRuntime : ILaneDAgentRuntime
         SetAuthHeader();
 
         var endpoint = BaseEndpoint.TrimEnd('/');
+        var url = $"{endpoint}/openai/responses?api-version={ApiVersion}";
 
-        // OpenAI Responses API — single synchronous call, no polling required.
-        // Confirmed working: base endpoint + gpt-4o + api-version=2025-03-01-preview → HTTP 200.
-        // NOTE: PLS-Agent:2 (named Foundry agent) requires project-endpoint + Azure AD Bearer auth,
-        // which needs AZURE_CLIENT_ID configured. Until then, gpt-4o via base endpoint is used.
         var requestBody = new
         {
             model             = ModelDeployment,
@@ -93,11 +92,11 @@ public sealed class FoundryAgentRuntime : ILaneDAgentRuntime
             max_output_tokens = request.MaxTokens
         };
 
-        _logger.LogInformation("[LaneD/Foundry] Model={Model} → POST {Endpoint}/openai/responses?api-version={ApiVersion}",
-            ModelDeployment, endpoint, ApiVersion);
+        _logger.LogInformation("[LaneD/Foundry] Model={Model} → POST {Url}",
+            ModelDeployment, url);
 
         using var resp = await _http.PostAsJsonAsync(
-            $"{endpoint}/openai/responses?api-version={ApiVersion}",
+            url,
             requestBody,
             cancellationToken);
 

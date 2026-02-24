@@ -90,7 +90,11 @@ builder.Services.AddSingleton(GuardrailPolicyLoader.Load(builder.Configuration))
 builder.Services.AddSingleton<GuardrailEvaluator>();
 
 // ── Lane D: Agentic runtime ──────────────────────────────────────────────────
-builder.Services.AddHttpClient("foundry");
+// 6-minute timeout: VisualPlanner sends a large prompt (full summary + spec format) and can take 3-4 min
+builder.Services.AddHttpClient("foundry", client =>
+{
+    client.Timeout = TimeSpan.FromMinutes(6);
+});
 var laneDRuntime = builder.Configuration["LANE_D_RUNTIME"] ?? "local";
 if (laneDRuntime.Equals("foundry", StringComparison.OrdinalIgnoreCase))
 {

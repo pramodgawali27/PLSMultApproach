@@ -319,6 +319,30 @@ app.MapGet("/api/jobs/{jobId:guid}", async (Guid jobId, HttpContext httpContext,
     })
     .RequireAuthorization();
 
+// Returns the latest Lane D stage progress from stage.json written by LaneDStageReporter.
+// Returns 204 No Content while no stage has been written yet (job queued or non-Lane-D).
+app.MapGet("/api/jobs/{jobId:guid}/stage", async (Guid jobId, HttpContext httpContext, PlsDbContext db) =>
+    {
+        var tenantId = httpContext.User.GetTenantId();
+        var userId = httpContext.User.GetUserId();
+
+        var job = await db.SummaryJobs.FirstOrDefaultAsync(x => x.Id == jobId && x.TenantId == tenantId && x.UserId == userId);
+        if (job is null) return Results.NotFound();
+
+        var document = await db.Documents.FirstOrDefaultAsync(x => x.Id == job.DocumentId && x.TenantId == tenantId);
+        if (document is null) return Results.NoContent();
+
+        var directory = Path.GetDirectoryName(document.StorageUri);
+        if (string.IsNullOrWhiteSpace(directory)) return Results.NoContent();
+
+        var stagePath = Path.Combine(directory, "stage.json");
+        if (!File.Exists(stagePath)) return Results.NoContent();
+
+        var content = await File.ReadAllTextAsync(stagePath);
+        return Results.Content(content, "application/json");
+    })
+    .RequireAuthorization();
+
 app.MapGet("/api/summaries/{summaryId:guid}", async (Guid summaryId, HttpContext httpContext, PlsDbContext db) =>
     {
         var tenantId = httpContext.User.GetTenantId();

@@ -19,6 +19,12 @@ export type JobResponse = {
   errorMessage?: string | null;
 };
 
+export type JobStageResponse = {
+  stageId: string;   // e.g. "D3_Evidence"
+  message: string;   // e.g. "Building claim-to-citation evidence map."
+  timestamp: string; // ISO-8601
+};
+
 type RuntimeConfig = {
   apiBaseUrl?: string;
 };
@@ -139,6 +145,17 @@ export async function fetchJob(jobId: string): Promise<JobResponse> {
     throw new Error("Job fetch failed");
   }
   return response.json() as Promise<JobResponse>;
+}
+
+// Returns the current Lane D stage written by LaneDStageReporter, or null if not yet available.
+export async function fetchJobStage(jobId: string): Promise<JobStageResponse | null> {
+  const apiBase = await getApiBase();
+  const response = await fetch(`${apiBase}/api/jobs/${jobId}/stage`, {
+    headers: { ...authHeaders() }
+  });
+  if (response.status === 204 || response.status === 404) return null;
+  if (!response.ok) return null;
+  return response.json() as Promise<JobStageResponse>;
 }
 
 export async function fetchSummaries(params: {

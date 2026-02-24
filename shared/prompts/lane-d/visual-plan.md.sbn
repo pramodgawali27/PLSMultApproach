@@ -5,7 +5,7 @@ Follow the Taylor & Francis PLSP visual style: purple (#6b4fa0) for treatment ar
 Verified facts (use ONLY these values — never invent):
 {{ facts_json }}
 
-Final PLS markdown (for placement context):
+Section headings from final PLS (for placement context — use exact heading text in insertAfterSection):
 {{ final_markdown }}
 
 Output ONLY valid VisualSpec JSON. No markdown, no explanations.
